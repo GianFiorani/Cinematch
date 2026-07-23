@@ -41,6 +41,12 @@ matches automáticamente y activa las suscripciones Realtime.
 
 > Nota: se agregó una columna `genre_id` a `rooms` (no listada en el modelo básico original)
 > porque el filtro de género opcional al crear la sala es un requisito funcional del MVP.
+> Si ya habías creado las tablas antes sin esta columna y ahora "Crear Sala" te tira el error
+> `Could not find the 'genre_id' column of 'rooms' in the schema cache`, corré sólo esto:
+>
+> ```sql
+> alter table public.rooms add column if not exists genre_id integer;
+> ```
 
 ```sql
 -- CineMatch — schema completo
