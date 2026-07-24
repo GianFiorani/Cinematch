@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscover, fetchItem } from '@/lib/tmdb';
@@ -9,9 +9,10 @@ import { NicknameGate } from './NicknameGate';
 import { SwipeDeck } from './SwipeDeck';
 import { MatchModal } from './MatchModal';
 import { MatchList } from './MatchList';
+import { AmbientGlow } from './AmbientGlow';
 import { QRCode } from './ui/QRCode';
 import { Spinner } from './ui/Spinner';
-import type { LocalParticipant, MatchRow, Participant, Room, TMDBItem, Vote } from '@/types';
+import type { LocalParticipant, MatchRow, Room, TMDBItem, Vote } from '@/types';
 
 type LoadState = 'loading' | 'ready' | 'not-found';
 type Tab = 'swipe' | 'matches';
@@ -20,7 +21,6 @@ export function RoomClient({ roomId }: { roomId: string }) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [room, setRoom] = useState<Room | null>(null);
   const [participant, setParticipant] = useState<LocalParticipant | null>(null);
-  const [participants, setParticipants] = useState<Participant[]>([]);
   const [items, setItems] = useState<TMDBItem[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [matches, setMatches] = useState<MatchRow[]>([]);
@@ -29,6 +29,12 @@ export function RoomClient({ roomId }: { roomId: string }) {
   const [tab, setTab] = useState<Tab>('swipe');
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [onlineCount, setOnlineCount] = useState(1);
+  const [currentPoster, setCurrentPoster] = useState<string | null>(null);
+
+  const handleTopItemChange = useCallback((item: TMDBItem | null) => {
+    setCurrentPoster(item?.poster_path ?? null);
+  }, []);
 
   // Load room + local participant.
   useEffect(() => {
@@ -49,36 +55,29 @@ export function RoomClient({ roomId }: { roomId: string }) {
     };
   }, [roomId]);
 
-  // Participants list + realtime join updates.
+  // Presence: who's actually online in the room right now (vs. everyone who ever joined).
   useEffect(() => {
-    if (!room) return;
-    let cancelled = false;
+    if (!room || !participant) return;
 
-    supabase
-      .from('participants')
-      .select('*')
-      .eq('room_id', room.id)
-      .then(({ data }) => {
-        if (!cancelled && data) setParticipants(data as Participant[]);
+    const channel = supabase.channel(`room:${room.id}:presence`, {
+      config: { presence: { key: participant.id } },
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        setOnlineCount(Object.keys(state).length);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ nickname: participant.nickname, online_at: new Date().toISOString() });
+        }
       });
 
-    const channel = supabase
-      .channel(`room:${room.id}:participants`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'participants', filter: `room_id=eq.${room.id}` },
-        (payload) => {
-          const newParticipant = payload.new as Participant;
-          setParticipants((prev) => (prev.some((p) => p.id === newParticipant.id) ? prev : [...prev, newParticipant]));
-        }
-      )
-      .subscribe();
-
     return () => {
-      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [room]);
+  }, [room, participant]);
 
   // Existing matches + realtime match notifications.
   useEffect(() => {
@@ -199,6 +198,23 @@ export function RoomClient({ roomId }: { roomId: string }) {
     }
   }
 
+  async function handleShareInvite() {
+    const url = `${window.location.origin}/room/${roomId}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'CineMatch',
+          text: 'Sumate a mi sala de CineMatch y elegí qué vemos 🎬',
+          url,
+        });
+      } catch {
+        // El usuario cerró el share sheet nativo sin elegir una app; no hace falta fallback.
+      }
+      return;
+    }
+    await handleCopyLink();
+  }
+
   if (loadState === 'loading') {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -224,13 +240,15 @@ export function RoomClient({ roomId }: { roomId: string }) {
 
   return (
     <div className="flex flex-1 flex-col">
+      <AmbientGlow posterPath={tab === 'swipe' ? currentPoster : null} />
+
       <header className="flex items-center justify-between px-5 pt-6">
         <div>
           <h1 className="text-lg font-bold">
             {room.type === 'movie' ? 'Películas' : 'Series'}
           </h1>
           <p className="text-xs text-white/50">
-            {participants.length} {participants.length === 1 ? 'participante' : 'participantes'}
+            🟢 {onlineCount} {onlineCount === 1 ? 'persona' : 'personas'} en la sala
           </p>
         </div>
         <button
@@ -262,7 +280,12 @@ export function RoomClient({ roomId }: { roomId: string }) {
             <Spinner className="h-8 w-8" />
           </div>
         ) : (
-          <SwipeDeck items={items} onVote={handleVote} />
+          <SwipeDeck
+            items={items}
+            type={room.type}
+            onVote={handleVote}
+            onTopItemChange={handleTopItemChange}
+          />
         )
       ) : (
         <MatchList matches={matches} itemCache={itemCache} />
@@ -272,7 +295,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
 
       {shareOpen && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-black/70"
+          className="fixed inset-0 z-[110] flex items-end justify-center bg-black/70"
           onClick={() => setShareOpen(false)}
         >
           <div
@@ -280,7 +303,15 @@ export function RoomClient({ roomId }: { roomId: string }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-1 text-lg font-bold">Invitá a tu sala</h2>
-            <p className="mb-4 text-sm text-white/50">Compartí el link o escaneá el QR por WhatsApp.</p>
+            <p className="mb-4 text-sm text-white/50">Mandale el link a quien quieras sumar, o escaneá el QR.</p>
+
+            <button
+              onClick={handleShareInvite}
+              className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-4 text-base font-bold text-white shadow-lg shadow-[#25D366]/30 transition-transform active:scale-95"
+            >
+              💬 {copied ? '¡Link copiado!' : 'Invitar por WhatsApp'}
+            </button>
+
             {roomUrl && (
               <div className="mb-4 flex justify-center">
                 <QRCode value={roomUrl} />
@@ -289,7 +320,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
             <p className="mb-4 break-all rounded-lg bg-black/30 px-3 py-2 text-xs text-white/60">{roomUrl}</p>
             <button
               onClick={handleCopyLink}
-              className="w-full rounded-xl bg-gradient-to-r from-brand-pink to-brand-orange px-5 py-3 text-sm font-semibold"
+              className="w-full rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white/70"
             >
               {copied ? '¡Copiado!' : 'Copiar link'}
             </button>

@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import confetti from 'canvas-confetti';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
 import { tmdbImageUrl, tmdbTitle, tmdbYear } from '@/lib/tmdb';
@@ -11,14 +13,42 @@ interface MatchModalProps {
   onClose: () => void;
 }
 
+const CONFETTI_COLORS = ['#FD267A', '#FF6036', '#31D0AA', '#FFD166'];
+
 export function MatchModal({ item, onClose }: MatchModalProps) {
   const poster = item ? tmdbImageUrl(item.poster_path, 'w500') : null;
+
+  useEffect(() => {
+    if (!item) return;
+
+    confetti({
+      particleCount: 120,
+      spread: 100,
+      startVelocity: 45,
+      origin: { y: 0.45 },
+      colors: CONFETTI_COLORS,
+      zIndex: 200,
+    });
+
+    const end = Date.now() + 1000;
+    let frameId: number;
+
+    (function burstFromSides() {
+      confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0, y: 0.6 }, colors: CONFETTI_COLORS, zIndex: 200 });
+      confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1, y: 0.6 }, colors: CONFETTI_COLORS, zIndex: 200 });
+      if (Date.now() < end) {
+        frameId = requestAnimationFrame(burstFromSides);
+      }
+    })();
+
+    return () => cancelAnimationFrame(frameId);
+  }, [item]);
 
   return (
     <AnimatePresence>
       {item && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-6"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 px-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

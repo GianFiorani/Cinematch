@@ -1,19 +1,32 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SwipeCard, type SwipeCardHandle } from './SwipeCard';
-import type { TMDBItem, Vote } from '@/types';
+import { DetailModal } from './DetailModal';
+import { fetchItem } from '@/lib/tmdb';
+import type { MediaType, TMDBItem, Vote } from '@/types';
 
 interface SwipeDeckProps {
   items: TMDBItem[];
+  type: MediaType;
   onVote: (item: TMDBItem, vote: Vote) => void;
+  onTopItemChange?: (item: TMDBItem | null) => void;
 }
 
-export function SwipeDeck({ items, onVote }: SwipeDeckProps) {
+export function SwipeDeck({ items, type, onVote, onTopItemChange }: SwipeDeckProps) {
   const [index, setIndex] = useState(0);
   const topRef = useRef<SwipeCardHandle>(null);
+  const [detailItem, setDetailItem] = useState<TMDBItem | null>(null);
+  const [detailFull, setDetailFull] = useState<TMDBItem | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const visible = items.slice(index, index + 3);
+  const topItem = visible[0] ?? null;
+
+  useEffect(() => {
+    onTopItemChange?.(topItem);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topItem?.id]);
 
   function handleSwiped(item: TMDBItem, vote: Vote) {
     onVote(item, vote);
@@ -22,6 +35,20 @@ export function SwipeDeck({ items, onVote }: SwipeDeckProps) {
 
   function triggerSwipe(vote: Vote) {
     topRef.current?.swipe(vote);
+  }
+
+  async function handleShowDetail(item: TMDBItem) {
+    setDetailItem(item);
+    setDetailFull(null);
+    setDetailLoading(true);
+    const full = await fetchItem(type, item.id);
+    setDetailFull(full);
+    setDetailLoading(false);
+  }
+
+  function handleCloseDetail() {
+    setDetailItem(null);
+    setDetailFull(null);
   }
 
   if (visible.length === 0) {
@@ -44,6 +71,7 @@ export function SwipeDeck({ items, onVote }: SwipeDeckProps) {
             isTop={i === 0}
             stackIndex={i}
             onSwiped={(vote) => handleSwiped(item, vote)}
+            onShowDetail={handleShowDetail}
           />
         ))}
       </div>
@@ -64,6 +92,8 @@ export function SwipeDeck({ items, onVote }: SwipeDeckProps) {
           ♥
         </button>
       </div>
+
+      <DetailModal item={detailItem} detail={detailFull} loading={detailLoading} onClose={handleCloseDetail} />
     </div>
   );
 }

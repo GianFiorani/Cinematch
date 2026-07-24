@@ -38,6 +38,25 @@ export interface TMDBGenre {
   name: string;
 }
 
+export interface TMDBWatchProvider {
+  provider_id: number;
+  provider_name: string;
+  logo_path: string;
+  display_priority?: number;
+}
+
+export interface TMDBWatchProviders {
+  link: string | null;
+  flatrate: TMDBWatchProvider[];
+  rent: TMDBWatchProvider[];
+  buy: TMDBWatchProvider[];
+}
+
+export interface ExternalRatings {
+  imdb: string | null;
+  rottenTomatoes: string | null;
+}
+
 export interface TMDBItem {
   id: number;
   title: string;
@@ -50,6 +69,12 @@ export interface TMDBItem {
   runtime?: number | null;
   episode_run_time?: number[];
   genre_ids?: number[];
+  genres?: TMDBGenre[];
+  providers?: TMDBWatchProviders | null;
+  ratings?: ExternalRatings | null;
+  cast?: string[];
+  director?: string | null;
+  trailerKey?: string | null;
 }
 
 export interface LocalParticipant {

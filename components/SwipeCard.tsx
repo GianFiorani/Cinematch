@@ -15,12 +15,13 @@ interface SwipeCardProps {
   isTop: boolean;
   stackIndex: number;
   onSwiped: (vote: Vote) => void;
+  onShowDetail: (item: TMDBItem) => void;
 }
 
 const SWIPE_THRESHOLD = 120;
 
 export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
-  ({ item, isTop, stackIndex, onSwiped }, ref) => {
+  ({ item, isTop, stackIndex, onSwiped, onShowDetail }, ref) => {
     const controls = useAnimationControls();
     const x = useMotionValue(0);
     const rotate = useTransform(x, [-300, 300], [-18, 18]);
@@ -106,6 +107,17 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
               >
                 NOPE
               </motion.span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShowDetail(item);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label="Ver más y tráiler"
+                className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-lg text-white backdrop-blur-sm"
+              >
+                ℹ️
+              </button>
             </>
           )}
 
@@ -122,7 +134,43 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
               <span>•</span>
               <span>★ {item.vote_average?.toFixed(1)}</span>
             </div>
-            <p className="mt-2 line-clamp-3 text-sm text-white/80">{item.overview}</p>
+
+            {(item.ratings?.imdb || item.ratings?.rottenTomatoes) && (
+              <div className="mt-1.5 flex items-center gap-1.5">
+                {item.ratings?.imdb && (
+                  <span className="rounded bg-black/40 px-1.5 py-0.5 text-xs font-semibold text-yellow-400">
+                    IMDb {item.ratings.imdb}
+                  </span>
+                )}
+                {item.ratings?.rottenTomatoes && (
+                  <span className="rounded bg-black/40 px-1.5 py-0.5 text-xs font-semibold text-red-400">
+                    🍅 {item.ratings.rottenTomatoes}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <p className="mt-2 line-clamp-2 text-sm text-white/80">{item.overview}</p>
+
+            {item.providers?.flatrate && item.providers.flatrate.length > 0 && (
+              <div className="mt-3 flex items-center gap-2">
+                {item.providers.flatrate.slice(0, 5).map((provider) => {
+                  const logo = tmdbImageUrl(provider.logo_path, 'w92');
+                  if (!logo) return null;
+                  return (
+                    <Image
+                      key={provider.provider_id}
+                      src={logo}
+                      alt={provider.provider_name}
+                      title={provider.provider_name}
+                      width={32}
+                      height={32}
+                      className="rounded-lg border border-white/10"
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </motion.div>
