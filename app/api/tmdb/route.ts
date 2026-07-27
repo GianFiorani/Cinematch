@@ -27,6 +27,20 @@ function extractProviders(detail: { 'watch/providers'?: TMDBWatchProvidersRespon
   };
 }
 
+// TMDB's own es-ES translations are missing for a handful of TV-specific genres
+// (these composite/English-only categories aren't part of the movie genre list).
+// We patch just these known gaps rather than leaving the UI half-English.
+const TV_GENRE_ES_OVERRIDES: Record<number, string> = {
+  10759: 'Acción y Aventura',
+  10762: 'Infantil',
+  10763: 'Noticias',
+  10764: 'Telerrealidad',
+  10765: 'Ciencia Ficción y Fantasía',
+  10766: 'Telenovela',
+  10767: 'Programa de Entrevistas',
+  10768: 'Guerra y Política',
+};
+
 function extractImdbId(detail: { imdb_id?: string | null; external_ids?: { imdb_id?: string | null } }) {
   return detail.external_ids?.imdb_id ?? detail.imdb_id ?? null;
 }
@@ -115,7 +129,14 @@ export async function GET(request: NextRequest) {
       });
       if (!res.ok) throw new Error(`TMDB respondió ${res.status}`);
       const data = await res.json();
-      return NextResponse.json({ genres: data.genres });
+      const genres: { id: number; name: string }[] =
+        type === 'tv'
+          ? data.genres.map((g: { id: number; name: string }) => ({
+              ...g,
+              name: TV_GENRE_ES_OVERRIDES[g.id] ?? g.name,
+            }))
+          : data.genres;
+      return NextResponse.json({ genres });
     }
 
     if (mode === 'item') {
@@ -159,12 +180,20 @@ export async function GET(request: NextRequest) {
         include_adult: 'false',
         page,
       };
-      if (genre) discoverParams.with_genres = genre;
+      // TMDB treats comma-separated genre ids as AND (must match all) and pipe-separated as
+      // OR (match any). Our own `genre` query param stays a plain comma-separated list; we
+      // only translate it to TMDB's OR syntax right here, at the boundary.
+      if (genre) discoverParams.with_genres = genre.split(',').join('|');
       if (decade) {
         const startYear = Number(decade);
         const dateField = type === 'movie' ? 'primary_release_date' : 'first_air_date';
-        discoverParams[`${dateField}.gte`] = `${startYear}-01-01`;
-        discoverParams[`${dateField}.lte`] = `${startYear + 9}-12-31`;
+        if (startYear === -1) {
+          // "Clásicos / pre-70s": upper bound only, no lower bound.
+          discoverParams[`${dateField}.lte`] = '1969-12-31';
+        } else {
+          discoverParams[`${dateField}.gte`] = `${startYear}-01-01`;
+          discoverParams[`${dateField}.lte`] = `${startYear + 9}-12-31`;
+        }
       }
 
       const res = await fetch(tmdbUrl(`/discover/${type}`, discoverParams), {

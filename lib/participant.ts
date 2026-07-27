@@ -34,3 +34,15 @@ export function clearLastRoomId() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(LAST_ROOM_KEY);
 }
+
+const ONBOARDING_SEEN_KEY = 'cinematch:hasSeenOnboarding';
+
+export function hasSeenOnboarding(): boolean {
+  if (typeof window === 'undefined') return true;
+  return window.localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true';
+}
+
+export function markOnboardingSeen() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
+}

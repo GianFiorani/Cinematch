@@ -2,8 +2,13 @@ import type { MediaType, TMDBGenre, TMDBItem } from '@/types';
 
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
+// -1 is a sentinel for "classics / pre-1970s" (no lower bound, just an upper one).
+// It can't be 0: several call sites use `if (decade)` truthiness checks, and 0 is falsy.
+export const CLASSICS_DECADE = -1;
+
 export const DECADES: { value: number | null; label: string }[] = [
   { value: null, label: 'Todas' },
+  { value: CLASSICS_DECADE, label: 'Clásicos (pre-70s)' },
   { value: 1970, label: '70s' },
   { value: 1980, label: '80s' },
   { value: 1990, label: '90s' },

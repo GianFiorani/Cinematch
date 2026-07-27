@@ -4,12 +4,18 @@ import { useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscover, fetchItem } from '@/lib/tmdb';
-import { getLocalParticipant, setLastRoomId } from '@/lib/participant';
+import {
+  getLocalParticipant,
+  hasSeenOnboarding,
+  markOnboardingSeen,
+  setLastRoomId,
+} from '@/lib/participant';
 import { NicknameGate } from './NicknameGate';
 import { SwipeDeck } from './SwipeDeck';
 import { MatchModal } from './MatchModal';
 import { MatchList } from './MatchList';
 import { AmbientGlow } from './AmbientGlow';
+import { OnboardingModal } from './OnboardingModal';
 import { QRCode } from './ui/QRCode';
 import { Spinner } from './ui/Spinner';
 import type { LocalParticipant, MatchRow, Room, TMDBItem, Vote } from '@/types';
@@ -31,9 +37,17 @@ export function RoomClient({ roomId }: { roomId: string }) {
   const [copied, setCopied] = useState(false);
   const [onlineCount, setOnlineCount] = useState(1);
   const [currentPoster, setCurrentPoster] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const handleTopItemChange = useCallback((item: TMDBItem | null) => {
     setCurrentPoster(item?.poster_path ?? null);
+  }, []);
+
+  useEffect(() => {
+    if (!hasSeenOnboarding()) {
+      setShowOnboarding(true);
+      markOnboardingSeen();
+    }
   }, []);
 
   // Load room + local participant.
@@ -235,7 +249,12 @@ export function RoomClient({ roomId }: { roomId: string }) {
   }
 
   if (!participant) {
-    return <NicknameGate roomId={roomId} onJoined={setParticipant} />;
+    return (
+      <>
+        <NicknameGate roomId={roomId} onJoined={setParticipant} />
+        <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      </>
+    );
   }
 
   const roomUrl = typeof window !== 'undefined' ? `${window.location.origin}/room/${roomId}` : '';
@@ -253,12 +272,21 @@ export function RoomClient({ roomId }: { roomId: string }) {
             🟢 {onlineCount} {onlineCount === 1 ? 'persona' : 'personas'} en la sala
           </p>
         </div>
-        <button
-          onClick={() => setShareOpen(true)}
-          className="rounded-full border border-white/15 bg-brand-surface px-4 py-2 text-sm font-semibold"
-        >
-          Invitar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowOnboarding(true)}
+            aria-label="¿Cómo funciona?"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-brand-surface text-lg"
+          >
+            ❓
+          </button>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="rounded-full border border-white/15 bg-brand-surface px-4 py-2 text-sm font-semibold"
+          >
+            Invitar
+          </button>
+        </div>
       </header>
 
       <nav className="mx-5 mt-4 flex rounded-xl bg-brand-surface p-1">
@@ -294,6 +322,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
       )}
 
       <MatchModal item={activeMatch} onClose={() => setActiveMatch(null)} />
+      <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
 
       {shareOpen && (
         <div

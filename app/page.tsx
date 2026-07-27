@@ -9,11 +9,14 @@ import {
   clearLastRoomId,
   getLastRoomId,
   getLocalParticipant,
+  hasSeenOnboarding,
+  markOnboardingSeen,
   setLastRoomId,
   setLocalParticipant,
 } from '@/lib/participant';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
+import { OnboardingModal } from '@/components/OnboardingModal';
 import type { MediaType, Room, TMDBGenre } from '@/types';
 
 export default function HomePage() {
@@ -26,6 +29,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resumeRoom, setResumeRoom] = useState<Room | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (!hasSeenOnboarding()) {
+      setShowOnboarding(true);
+      markOnboardingSeen();
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +129,12 @@ export default function HomePage() {
           <p className="mt-2 text-sm text-white/60">
             Swipeá con tu pareja o amigos y encontrá algo que a todos les copa mirar.
           </p>
+          <button
+            onClick={() => setShowOnboarding(true)}
+            className="mt-3 rounded-full border border-white/15 bg-brand-surface px-4 py-2 text-sm font-semibold text-white/80"
+          >
+            ❓ ¿Cómo funciona?
+          </button>
         </div>
 
         {resumeRoom && (
@@ -223,6 +240,8 @@ export default function HomePage() {
       <Button onClick={handleCreateRoom} disabled={loading} className="w-full">
         {loading ? <Spinner /> : 'Crear Sala'}
       </Button>
+
+      <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
     </main>
   );
 }
