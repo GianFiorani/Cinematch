@@ -153,12 +153,19 @@ export async function GET(request: NextRequest) {
     if (mode === 'discover') {
       const genre = searchParams.get('genre');
       const page = searchParams.get('page') ?? '1';
+      const decade = searchParams.get('decade');
       const discoverParams: Record<string, string> = {
         sort_by: 'popularity.desc',
         include_adult: 'false',
         page,
       };
       if (genre) discoverParams.with_genres = genre;
+      if (decade) {
+        const startYear = Number(decade);
+        const dateField = type === 'movie' ? 'primary_release_date' : 'first_air_date';
+        discoverParams[`${dateField}.gte`] = `${startYear}-01-01`;
+        discoverParams[`${dateField}.lte`] = `${startYear + 9}-12-31`;
+      }
 
       const res = await fetch(tmdbUrl(`/discover/${type}`, discoverParams), {
         next: { revalidate: 300 },

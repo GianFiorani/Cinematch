@@ -135,8 +135,10 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
               <span>★ {item.vote_average?.toFixed(1)}</span>
             </div>
 
+            <p className="mt-2 line-clamp-2 text-sm text-white/80">{item.overview}</p>
+
             {(item.ratings?.imdb || item.ratings?.rottenTomatoes) && (
-              <div className="mt-1.5 flex items-center gap-1.5">
+              <div className="mt-2 flex flex-row items-center gap-2">
                 {item.ratings?.imdb && (
                   <span className="rounded bg-black/40 px-1.5 py-0.5 text-xs font-semibold text-yellow-400">
                     IMDb {item.ratings.imdb}
@@ -149,8 +151,6 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
                 )}
               </div>
             )}
-
-            <p className="mt-2 line-clamp-2 text-sm text-white/80">{item.overview}</p>
 
             {item.providers?.flatrate && item.providers.flatrate.length > 0 && (
               <div className="mt-3 flex items-center gap-2">

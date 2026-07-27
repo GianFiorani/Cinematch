@@ -2,6 +2,16 @@ import type { MediaType, TMDBGenre, TMDBItem } from '@/types';
 
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
+export const DECADES: { value: number | null; label: string }[] = [
+  { value: null, label: 'Todas' },
+  { value: 1970, label: '70s' },
+  { value: 1980, label: '80s' },
+  { value: 1990, label: '90s' },
+  { value: 2000, label: '2000s' },
+  { value: 2010, label: '2010s' },
+  { value: 2020, label: '2020s' },
+];
+
 export function tmdbImageUrl(
   path: string | null,
   size: 'w45' | 'w92' | 'w342' | 'w500' | 'w780' = 'w500'
@@ -36,11 +46,13 @@ export async function fetchGenres(type: MediaType): Promise<TMDBGenre[]> {
 
 export async function fetchDiscover(
   type: MediaType,
-  genreId: number | null,
-  page = 1
+  genreIds: number[] | null,
+  page = 1,
+  decade: number | null = null
 ): Promise<TMDBItem[]> {
   const params = new URLSearchParams({ mode: 'discover', type, page: String(page) });
-  if (genreId) params.set('genre', String(genreId));
+  if (genreIds && genreIds.length > 0) params.set('genre', genreIds.join(','));
+  if (decade) params.set('decade', String(decade));
   const res = await fetch(`/api/tmdb?${params.toString()}`);
   if (!res.ok) throw new Error('No se pudo cargar el catálogo de TMDB');
   const data = await res.json();

@@ -7,7 +7,8 @@ export interface Room {
   created_at: string;
   status: RoomStatus;
   type: MediaType;
-  genre_id: number | null;
+  genre_ids: number[] | null;
+  decade: number | null;
 }
 
 export interface Participant {

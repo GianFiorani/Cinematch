@@ -17,3 +17,20 @@ export function setLocalParticipant(roomId: string, participant: LocalParticipan
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(storageKey(roomId), JSON.stringify(participant));
 }
+
+const LAST_ROOM_KEY = 'cinematch:lastRoom';
+
+export function getLastRoomId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(LAST_ROOM_KEY);
+}
+
+export function setLastRoomId(roomId: string) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(LAST_ROOM_KEY, roomId);
+}
+
+export function clearLastRoomId() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(LAST_ROOM_KEY);
+}

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscover, fetchItem } from '@/lib/tmdb';
-import { getLocalParticipant } from '@/lib/participant';
+import { getLocalParticipant, setLastRoomId } from '@/lib/participant';
 import { NicknameGate } from './NicknameGate';
 import { SwipeDeck } from './SwipeDeck';
 import { MatchModal } from './MatchModal';
@@ -47,7 +47,9 @@ export function RoomClient({ roomId }: { roomId: string }) {
         return;
       }
       setRoom(data as Room);
-      setParticipant(getLocalParticipant(roomId));
+      const existingParticipant = getLocalParticipant(roomId);
+      setParticipant(existingParticipant);
+      if (existingParticipant) setLastRoomId(roomId);
       setLoadState('ready');
     })();
     return () => {
@@ -146,8 +148,8 @@ export function RoomClient({ roomId }: { roomId: string }) {
       setLoadingCatalog(true);
       try {
         const [page1, page2] = await Promise.all([
-          fetchDiscover(room.type, room.genre_id, 1),
-          fetchDiscover(room.type, room.genre_id, 2),
+          fetchDiscover(room.type, room.genre_ids, 1, room.decade),
+          fetchDiscover(room.type, room.genre_ids, 2, room.decade),
         ]);
         const { data: mySwipes } = await supabase
           .from('swipes')

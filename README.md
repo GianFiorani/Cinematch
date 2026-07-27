@@ -39,13 +39,17 @@ Entrá al **SQL Editor** de tu proyecto de Supabase (Project → SQL Editor → 
 ejecutá exactamente lo siguiente. Crea las 4 tablas, las políticas RLS, el trigger que detecta
 matches automáticamente y activa las suscripciones Realtime.
 
-> Nota: se agregó una columna `genre_id` a `rooms` (no listada en el modelo básico original)
-> porque el filtro de género opcional al crear la sala es un requisito funcional del MVP.
-> Si ya habías creado las tablas antes sin esta columna y ahora "Crear Sala" te tira el error
-> `Could not find the 'genre_id' column of 'rooms' in the schema cache`, corré sólo esto:
+> Nota: `rooms` tiene una columna `genre_ids integer[]` (no listada en el modelo básico original)
+> para el filtro de géneros — ahora multi-selección — al crear la sala. Reemplaza a la vieja
+> columna `genre_id` (integer, un solo género) de versiones anteriores del MVP.
+> También tiene `decade integer` para el filtro opcional de década (guarda el año de inicio,
+> ej. `1990` para "90s"; `null` es "todas").
+> Si ya tenías las tablas creadas y "Crear Sala" te tira un error de columna faltante
+> (`genre_ids` o `decade`), corré esto:
 >
 > ```sql
-> alter table public.rooms add column if not exists genre_id integer;
+> alter table public.rooms add column if not exists genre_ids integer[];
+> alter table public.rooms add column if not exists decade integer;
 > ```
 
 ```sql
@@ -62,7 +66,8 @@ create table if not exists public.rooms (
   created_at timestamptz not null default now(),
   status text not null default 'active' check (status in ('active', 'closed')),
   type text not null check (type in ('movie', 'tv')),
-  genre_id integer
+  genre_ids integer[],
+  decade integer
 );
 
 create table if not exists public.participants (

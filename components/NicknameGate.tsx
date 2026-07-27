@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { setLocalParticipant } from '@/lib/participant';
+import { setLocalParticipant, setLastRoomId } from '@/lib/participant';
 import { Button } from './ui/Button';
 import type { LocalParticipant } from '@/types';
 
@@ -32,6 +32,7 @@ export function NicknameGate({ roomId, onJoined }: NicknameGateProps) {
 
       const participant = { id, nickname: finalNickname };
       setLocalParticipant(roomId, participant);
+      setLastRoomId(roomId);
       onJoined(participant);
     } catch (err) {
       console.error(err);
