@@ -41,6 +41,29 @@ const TV_GENRE_ES_OVERRIDES: Record<number, string> = {
   10768: 'Guerra y Política',
 };
 
+// The 6 major streaming platforms we offer as filter chips. We match TMDB's live
+// watch/providers list by name (case-insensitive) instead of hardcoding provider_ids:
+// those ids are stable per-platform but the display name/rebrand (e.g. HBO Max -> Max)
+// has changed before, and matching by name self-heals across those rebrands.
+const CURATED_PROVIDERS: { key: string; names: string[] }[] = [
+  { key: 'netflix', names: ['netflix'] },
+  { key: 'prime', names: ['amazon prime video', 'prime video'] },
+  { key: 'max', names: ['max', 'hbo max'] },
+  { key: 'disney', names: ['disney plus', 'disney+'] },
+  { key: 'paramount', names: ['paramount plus', 'paramount+'] },
+  // TMDB lists this one simply as "Apple TV" in the AR region (not "Apple TV Plus"/"Apple TV+").
+  // The match is exact-string, so this can't accidentally catch "Apple TV Store" or the
+  // various "... Apple TV Channel" rental add-ons that also show up in the same list.
+  { key: 'appletv', names: ['apple tv plus', 'apple tv+', 'apple tv'] },
+];
+
+interface TMDBProviderListEntry {
+  provider_id: number;
+  provider_name: string;
+  logo_path: string;
+  display_priority?: number;
+}
+
 function extractImdbId(detail: { imdb_id?: string | null; external_ids?: { imdb_id?: string | null } }) {
   return detail.external_ids?.imdb_id ?? detail.imdb_id ?? null;
 }
@@ -139,6 +162,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ genres });
     }
 
+    if (mode === 'providers') {
+      const region = searchParams.get('region') || WATCH_REGION;
+      const res = await fetch(tmdbUrl(`/watch/providers/${type}`, { watch_region: region }), {
+        next: { revalidate: 86400 },
+      });
+      if (!res.ok) throw new Error(`TMDB respondió ${res.status}`);
+      const data = await res.json();
+      const results: TMDBProviderListEntry[] = data.results ?? [];
+
+      const providers = CURATED_PROVIDERS.map(({ names }) => {
+        const match = results.find((r) => names.includes(r.provider_name.toLowerCase()));
+        return match
+          ? {
+              provider_id: match.provider_id,
+              provider_name: match.provider_name,
+              logo_path: match.logo_path,
+            }
+          : null;
+      }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+      return NextResponse.json({ providers });
+    }
+
     if (mode === 'item') {
       const id = searchParams.get('id');
       if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 });
@@ -175,11 +221,19 @@ export async function GET(request: NextRequest) {
       const genre = searchParams.get('genre');
       const page = searchParams.get('page') ?? '1';
       const decade = searchParams.get('decade');
+      const provider = searchParams.get('provider');
+      const region = searchParams.get('region') || WATCH_REGION;
       const discoverParams: Record<string, string> = {
         sort_by: 'popularity.desc',
         include_adult: 'false',
         page,
       };
+      // Same AND/OR nuance as with_genres: TMDB needs pipe-separated ids for "any of these
+      // platforms", and watch_region is required for with_watch_providers to take effect at all.
+      if (provider) {
+        discoverParams.with_watch_providers = provider.split(',').join('|');
+        discoverParams.watch_region = region;
+      }
       // TMDB treats comma-separated genre ids as AND (must match all) and pipe-separated as
       // OR (match any). Our own `genre` query param stays a plain comma-separated list; we
       // only translate it to TMDB's OR syntax right here, at the boundary.

@@ -9,6 +9,7 @@ export interface Room {
   type: MediaType;
   genre_ids: number[] | null;
   decade: number | null;
+  provider_ids: number[] | null;
 }
 
 export interface Participant {

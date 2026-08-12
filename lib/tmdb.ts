@@ -1,4 +1,4 @@
-import type { MediaType, TMDBGenre, TMDBItem } from '@/types';
+import type { MediaType, TMDBGenre, TMDBItem, TMDBWatchProvider } from '@/types';
 
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -53,15 +53,24 @@ export async function fetchDiscover(
   type: MediaType,
   genreIds: number[] | null,
   page = 1,
-  decade: number | null = null
+  decade: number | null = null,
+  providerIds: number[] | null = null
 ): Promise<TMDBItem[]> {
   const params = new URLSearchParams({ mode: 'discover', type, page: String(page) });
   if (genreIds && genreIds.length > 0) params.set('genre', genreIds.join(','));
   if (decade) params.set('decade', String(decade));
+  if (providerIds && providerIds.length > 0) params.set('provider', providerIds.join(','));
   const res = await fetch(`/api/tmdb?${params.toString()}`);
   if (!res.ok) throw new Error('No se pudo cargar el catálogo de TMDB');
   const data = await res.json();
   return data.results as TMDBItem[];
+}
+
+export async function fetchProviders(type: MediaType): Promise<TMDBWatchProvider[]> {
+  const res = await fetch(`/api/tmdb?mode=providers&type=${type}`);
+  if (!res.ok) throw new Error('No se pudieron cargar las plataformas');
+  const data = await res.json();
+  return data.providers as TMDBWatchProvider[];
 }
 
 export async function fetchItem(type: MediaType, id: number): Promise<TMDBItem | null> {

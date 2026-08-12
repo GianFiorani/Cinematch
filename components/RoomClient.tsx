@@ -162,8 +162,8 @@ export function RoomClient({ roomId }: { roomId: string }) {
       setLoadingCatalog(true);
       try {
         const [page1, page2] = await Promise.all([
-          fetchDiscover(room.type, room.genre_ids, 1, room.decade),
-          fetchDiscover(room.type, room.genre_ids, 2, room.decade),
+          fetchDiscover(room.type, room.genre_ids, 1, room.decade, room.provider_ids),
+          fetchDiscover(room.type, room.genre_ids, 2, room.decade, room.provider_ids),
         ]);
         const { data: mySwipes } = await supabase
           .from('swipes')

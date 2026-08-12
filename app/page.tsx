@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
-import { DECADES, fetchGenres } from '@/lib/tmdb';
+import { DECADES, fetchGenres, fetchProviders, tmdbImageUrl } from '@/lib/tmdb';
 import {
   clearLastRoomId,
   getLastRoomId,
@@ -17,7 +18,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { OnboardingModal } from '@/components/OnboardingModal';
-import type { MediaType, Room, TMDBGenre } from '@/types';
+import type { MediaType, Room, TMDBGenre, TMDBWatchProvider } from '@/types';
 
 export default function HomePage() {
   const router = useRouter();
@@ -26,6 +27,8 @@ export default function HomePage() {
   const [genres, setGenres] = useState<TMDBGenre[]>([]);
   const [genreIds, setGenreIds] = useState<number[]>([]);
   const [decade, setDecade] = useState<number | null>(null);
+  const [providers, setProviders] = useState<TMDBWatchProvider[]>([]);
+  const [providerIds, setProviderIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resumeRoom, setResumeRoom] = useState<Room | null>(null);
@@ -47,6 +50,21 @@ export default function HomePage() {
       })
       .catch(() => {
         if (!cancelled) setGenres([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [type]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProviderIds([]);
+    fetchProviders(type)
+      .then((data) => {
+        if (!cancelled) setProviders(data);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([]);
       });
     return () => {
       cancelled = true;
@@ -82,6 +100,10 @@ export default function HomePage() {
     setGenreIds((prev) => (prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]));
   }
 
+  function toggleProvider(id: number) {
+    setProviderIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  }
+
   async function handleCreateRoom() {
     setLoading(true);
     setError(null);
@@ -92,6 +114,7 @@ export default function HomePage() {
           type,
           genre_ids: genreIds.length > 0 ? genreIds : null,
           decade,
+          provider_ids: providerIds.length > 0 ? providerIds : null,
         })
         .select()
         .single();
@@ -228,6 +251,42 @@ export default function HomePage() {
                   )}
                 >
                   {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <span className="mb-2 block text-sm font-medium text-white/70">
+            Plataformas (opcional{providerIds.length > 0 ? ` · ${providerIds.length} elegidas` : ''})
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {providers.map((provider) => {
+              const active = providerIds.includes(provider.provider_id);
+              const logo = tmdbImageUrl(provider.logo_path, 'w45');
+              return (
+                <button
+                  key={provider.provider_id}
+                  type="button"
+                  onClick={() => toggleProvider(provider.provider_id)}
+                  className={clsx(
+                    'flex items-center gap-2 rounded-full border pl-2 pr-3 py-1.5 text-sm font-medium transition-colors',
+                    active
+                      ? 'border-transparent bg-gradient-to-r from-brand-pink to-brand-orange text-white'
+                      : 'border-white/10 bg-brand-surface text-white/60'
+                  )}
+                >
+                  {logo && (
+                    <Image
+                      src={logo}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="rounded-full"
+                    />
+                  )}
+                  {provider.provider_name}
                 </button>
               );
             })}

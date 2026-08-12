@@ -43,13 +43,15 @@ matches automáticamente y activa las suscripciones Realtime.
 > para el filtro de géneros — ahora multi-selección — al crear la sala. Reemplaza a la vieja
 > columna `genre_id` (integer, un solo género) de versiones anteriores del MVP.
 > También tiene `decade integer` para el filtro opcional de década (guarda el año de inicio,
-> ej. `1990` para "90s"; `null` es "todas").
+> ej. `1990` para "90s"; `null` es "todas") y `provider_ids integer[]` para el filtro de
+> plataformas de streaming (Netflix, Prime Video, Max, Disney+, Paramount+, Apple TV+).
 > Si ya tenías las tablas creadas y "Crear Sala" te tira un error de columna faltante
-> (`genre_ids` o `decade`), corré esto:
+> (`genre_ids`, `decade` o `provider_ids`), corré esto:
 >
 > ```sql
 > alter table public.rooms add column if not exists genre_ids integer[];
 > alter table public.rooms add column if not exists decade integer;
+> alter table public.rooms add column if not exists provider_ids integer[];
 > ```
 
 ```sql
@@ -67,7 +69,8 @@ create table if not exists public.rooms (
   status text not null default 'active' check (status in ('active', 'closed')),
   type text not null check (type in ('movie', 'tv')),
   genre_ids integer[],
-  decade integer
+  decade integer,
+  provider_ids integer[]
 );
 
 create table if not exists public.participants (
