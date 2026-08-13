@@ -1,15 +1,17 @@
 'use client';
 
 import Image from 'next/image';
+import clsx from 'clsx';
 import { tmdbImageUrl, tmdbTitle, tmdbYear } from '@/lib/tmdb';
 import type { MatchRow, TMDBItem } from '@/types';
 
 interface MatchListProps {
   matches: MatchRow[];
   itemCache: Record<number, TMDBItem>;
+  onToggleWatched: (match: MatchRow) => void;
 }
 
-export function MatchList({ matches, itemCache }: MatchListProps) {
+export function MatchList({ matches, itemCache, onToggleWatched }: MatchListProps) {
   if (matches.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-8 text-center text-white/50">
@@ -31,15 +33,29 @@ export function MatchList({ matches, itemCache }: MatchListProps) {
             return (
               <li
                 key={match.id}
-                className="flex items-center gap-3 rounded-2xl border border-white/10 bg-brand-surface p-3"
+                className={clsx(
+                  'flex items-center gap-3 rounded-2xl border border-white/10 bg-brand-surface p-3',
+                  match.watched && 'opacity-60'
+                )}
               >
                 <div className="relative h-20 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-black/30">
                   {poster && <Image src={poster} alt={item ? tmdbTitle(item) : ''} fill className="object-cover" />}
                 </div>
-                <div>
-                  <p className="font-semibold">{item ? tmdbTitle(item) : `Título #${match.tmdb_id}`}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{item ? tmdbTitle(item) : `Título #${match.tmdb_id}`}</p>
                   <p className="text-sm text-white/50">{item ? tmdbYear(item) : ''}</p>
                 </div>
+                <button
+                  onClick={() => onToggleWatched(match)}
+                  className={clsx(
+                    'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                    match.watched
+                      ? 'border-white/15 bg-white/10 text-white/60'
+                      : 'border-transparent bg-gradient-to-r from-brand-pink to-brand-orange text-white'
+                  )}
+                >
+                  {match.watched ? 'Vista ✓' : 'Guardada para después'}
+                </button>
               </li>
             );
           })}

@@ -7,22 +7,21 @@ import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { DECADES, fetchGenres, fetchProviders, tmdbImageUrl } from '@/lib/tmdb';
 import {
-  clearLastRoomId,
-  getLastRoomId,
-  getLocalParticipant,
+  getSavedRooms,
   hasSeenOnboarding,
   markOnboardingSeen,
-  setLastRoomId,
+  pruneSavedRooms,
   setLocalParticipant,
 } from '@/lib/participant';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { OnboardingModal } from '@/components/OnboardingModal';
-import type { MediaType, Room, TMDBGenre, TMDBWatchProvider } from '@/types';
+import type { MediaType, SavedRoom, TMDBGenre, TMDBWatchProvider } from '@/types';
 
 export default function HomePage() {
   const router = useRouter();
   const [nickname, setNickname] = useState('');
+  const [roomName, setRoomName] = useState('');
   const [type, setType] = useState<MediaType>('movie');
   const [genres, setGenres] = useState<TMDBGenre[]>([]);
   const [genreIds, setGenreIds] = useState<number[]>([]);
@@ -31,7 +30,7 @@ export default function HomePage() {
   const [providerIds, setProviderIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resumeRoom, setResumeRoom] = useState<Room | null>(null);
+  const [savedRooms, setSavedRooms] = useState<SavedRoom[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
@@ -71,25 +70,20 @@ export default function HomePage() {
     };
   }, [type]);
 
+  // Load "Tus Salas Guardadas", pruning any entry whose room got closed/deleted meanwhile.
   useEffect(() => {
-    const lastRoomId = getLastRoomId();
-    if (!lastRoomId || !getLocalParticipant(lastRoomId)) {
-      if (lastRoomId) clearLastRoomId();
-      return;
-    }
+    const saved = getSavedRooms();
+    if (saved.length === 0) return;
     let cancelled = false;
     supabase
       .from('rooms')
-      .select('*')
-      .eq('id', lastRoomId)
-      .single()
-      .then(({ data, error: fetchError }) => {
+      .select('id')
+      .in('id', saved.map((r) => r.roomId))
+      .eq('status', 'active')
+      .then(({ data }) => {
         if (cancelled) return;
-        if (fetchError || !data || data.status !== 'active') {
-          clearLastRoomId();
-          return;
-        }
-        setResumeRoom(data as Room);
+        const activeIds = (data ?? []).map((r) => r.id as string);
+        setSavedRooms(pruneSavedRooms(activeIds));
       });
     return () => {
       cancelled = true;
@@ -108,10 +102,14 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     try {
+      const finalNickname = nickname.trim() || 'Host';
+      const finalRoomName = roomName.trim() || `Sala de ${finalNickname}`;
+
       const { data: room, error: roomError } = await supabase
         .from('rooms')
         .insert({
           type,
+          name: finalRoomName,
           genre_ids: genreIds.length > 0 ? genreIds : null,
           decade,
           provider_ids: providerIds.length > 0 ? providerIds : null,
@@ -122,7 +120,6 @@ export default function HomePage() {
       if (roomError || !room) throw roomError ?? new Error('No se pudo crear la sala');
 
       const participantId = crypto.randomUUID();
-      const finalNickname = nickname.trim() || 'Host';
 
       const { error: participantError } = await supabase.from('participants').insert({
         id: participantId,
@@ -133,7 +130,6 @@ export default function HomePage() {
       if (participantError) throw participantError;
 
       setLocalParticipant(room.id, { id: participantId, nickname: finalNickname });
-      setLastRoomId(room.id);
       router.push(`/room/${room.id}`);
     } catch (err) {
       console.error(err);
@@ -160,20 +156,37 @@ export default function HomePage() {
           </button>
         </div>
 
-        {resumeRoom && (
-          <button
-            onClick={() => router.push(`/room/${resumeRoom.id}`)}
-            className="mb-6 flex w-full items-center justify-between rounded-xl border border-brand-pink/40 bg-brand-surface px-4 py-3 text-left"
-          >
-            <span>
-              <span className="block text-sm font-semibold text-white">Volver a tu sala</span>
-              <span className="block text-xs text-white/50">
-                {resumeRoom.type === 'movie' ? 'Películas' : 'Series'} · seguí donde la dejaste
-              </span>
-            </span>
-            <span className="text-brand-pink">→</span>
-          </button>
+        {savedRooms.length > 0 && (
+          <div className="mb-6">
+            <span className="mb-2 block text-sm font-medium text-white/70">Tus Salas Guardadas</span>
+            <div className="flex flex-col gap-2">
+              {savedRooms.map((saved) => (
+                <button
+                  key={saved.roomId}
+                  onClick={() => router.push(`/room/${saved.roomId}`)}
+                  className="flex w-full items-center justify-between rounded-xl border border-brand-pink/40 bg-brand-surface px-4 py-3 text-left"
+                >
+                  <span>
+                    <span className="block text-sm font-semibold text-white">{saved.roomName}</span>
+                    <span className="block text-xs text-white/50">Código {saved.roomCode}</span>
+                  </span>
+                  <span className="text-brand-pink">→</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
+
+        <label className="mb-6 block">
+          <span className="mb-2 block text-sm font-medium text-white/70">Nombre de la sala (opcional)</span>
+          <input
+            value={roomName}
+            onChange={(e) => setRoomName(e.target.value)}
+            maxLength={40}
+            placeholder="Ej: Peli night del viernes"
+            className="w-full rounded-xl border border-white/10 bg-brand-surface px-4 py-3 text-white placeholder:text-white/30 focus:border-brand-pink focus:outline-none"
+          />
+        </label>
 
         <label className="mb-6 block">
           <span className="mb-2 block text-sm font-medium text-white/70">Tu apodo (opcional)</span>

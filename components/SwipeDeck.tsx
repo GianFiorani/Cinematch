@@ -14,13 +14,15 @@ interface SwipeDeckProps {
 }
 
 export function SwipeDeck({ items, type, onVote, onTopItemChange }: SwipeDeckProps) {
-  const [index, setIndex] = useState(0);
   const topRef = useRef<SwipeCardHandle>(null);
   const [detailItem, setDetailItem] = useState<TMDBItem | null>(null);
   const [detailFull, setDetailFull] = useState<TMDBItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const visible = items.slice(index, index + 3);
+  // `items` is the parent's live "remaining unswiped queue" (RoomClient removes an item as soon
+  // as it's voted), so this deck stays correct across unmount/remount — e.g. switching to the
+  // Matches tab and back — without needing its own index state.
+  const visible = items.slice(0, 3);
   const topItem = visible[0] ?? null;
 
   useEffect(() => {
@@ -30,7 +32,6 @@ export function SwipeDeck({ items, type, onVote, onTopItemChange }: SwipeDeckPro
 
   function handleSwiped(item: TMDBItem, vote: Vote) {
     onVote(item, vote);
-    setIndex((i) => i + 1);
   }
 
   function triggerSwipe(vote: Vote) {

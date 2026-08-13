@@ -46,12 +46,24 @@ matches automáticamente y activa las suscripciones Realtime.
 > ej. `1990` para "90s"; `null` es "todas") y `provider_ids integer[]` para el filtro de
 > plataformas de streaming (Netflix, Prime Video, Max, Disney+, Paramount+, Apple TV+).
 > Si ya tenías las tablas creadas y "Crear Sala" te tira un error de columna faltante
-> (`genre_ids`, `decade` o `provider_ids`), corré esto:
+> (`genre_ids`, `decade`, `provider_ids` o `name`), corré esto:
 >
 > ```sql
 > alter table public.rooms add column if not exists genre_ids integer[];
 > alter table public.rooms add column if not exists decade integer;
 > alter table public.rooms add column if not exists provider_ids integer[];
+> alter table public.rooms add column if not exists name text;
+> ```
+>
+> Y si ya tenías `matches` creada de antes (sin el toggle "Vista"/"Guardada para después"),
+> corré esto — la columna guarda el estado y la policy es la que permite que cualquier
+> participante lo actualice (antes `matches` sólo tenía policy de lectura, los inserts
+> pasan por el trigger):
+>
+> ```sql
+> alter table public.matches add column if not exists watched boolean not null default false;
+> create policy "anyone can mark a match as watched" on public.matches
+>   for update using (true) with check (true);
 > ```
 
 ```sql
@@ -68,6 +80,7 @@ create table if not exists public.rooms (
   created_at timestamptz not null default now(),
   status text not null default 'active' check (status in ('active', 'closed')),
   type text not null check (type in ('movie', 'tv')),
+  name text,
   genre_ids integer[],
   decade integer,
   provider_ids integer[]
@@ -95,6 +108,7 @@ create table if not exists public.matches (
   room_id uuid not null references public.rooms(id) on delete cascade,
   tmdb_id integer not null,
   created_at timestamptz not null default now(),
+  watched boolean not null default false,
   unique (room_id, tmdb_id)
 );
 
@@ -178,6 +192,8 @@ create policy "matches are readable by anyone" on public.matches
 -- Los inserts en `matches` sólo ocurren vía el trigger (security definer,
 -- corre como owner de la tabla), por eso no se otorga policy de insert al
 -- rol anon directamente.
+create policy "anyone can mark a match as watched" on public.matches
+  for update using (true) with check (true);
 
 -- ─────────────────────────────────────────────
 -- Realtime

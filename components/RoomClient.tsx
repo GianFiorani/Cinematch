@@ -8,7 +8,7 @@ import {
   getLocalParticipant,
   hasSeenOnboarding,
   markOnboardingSeen,
-  setLastRoomId,
+  upsertSavedRoom,
 } from '@/lib/participant';
 import { NicknameGate } from './NicknameGate';
 import { SwipeDeck } from './SwipeDeck';
@@ -63,13 +63,25 @@ export function RoomClient({ roomId }: { roomId: string }) {
       setRoom(data as Room);
       const existingParticipant = getLocalParticipant(roomId);
       setParticipant(existingParticipant);
-      if (existingParticipant) setLastRoomId(roomId);
       setLoadState('ready');
     })();
     return () => {
       cancelled = true;
     };
   }, [roomId]);
+
+  // Record/refresh this room in the "Tus Salas Guardadas" list on the home screen —
+  // covers the host right after creating it, a guest right after joining, and every
+  // later revisit (bumps lastAccess so recently-used rooms sort first).
+  useEffect(() => {
+    if (!room || !participant) return;
+    upsertSavedRoom({
+      roomId: room.id,
+      roomCode: room.id.slice(0, 8).toUpperCase(),
+      roomName: room.name ?? `Sala de ${participant.nickname}`,
+      lastAccess: new Date().toISOString(),
+    });
+  }, [room, participant]);
 
   // Presence: who's actually online in the room right now (vs. everyone who ever joined).
   useEffect(() => {
@@ -122,6 +134,16 @@ export function RoomClient({ roomId }: { roomId: string }) {
             setItemCache((prev) => ({ ...prev, [newMatch.tmdb_id]: detail }));
             setActiveMatch(detail);
           }
+        }
+      )
+      .on(
+        // Keeps "Vista"/"Guardada para después" in sync for every participant in the room,
+        // not just whoever tapped the toggle.
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'matches', filter: `room_id=eq.${room.id}` },
+        (payload) => {
+          const updated = payload.new as MatchRow;
+          setMatches((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
         }
       )
       .subscribe();
@@ -192,6 +214,10 @@ export function RoomClient({ roomId }: { roomId: string }) {
   async function handleVote(item: TMDBItem, vote: Vote) {
     if (!room || !participant) return;
     setItemCache((prev) => ({ ...prev, [item.id]: item }));
+    // Drop the voted item from the deck's own source of truth (not just SwipeDeck's local
+    // index) so it can never resurface if SwipeDeck unmounts/remounts, e.g. on a Swipe/Matches
+    // tab switch.
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
     const { error } = await supabase.from('swipes').insert({
       room_id: room.id,
       participant_id: participant.id,
@@ -200,6 +226,16 @@ export function RoomClient({ roomId }: { roomId: string }) {
     });
     if (error && error.code !== '23505') {
       console.error('Error al registrar el swipe', error);
+    }
+  }
+
+  async function handleToggleWatched(match: MatchRow) {
+    const nextWatched = !match.watched;
+    setMatches((prev) => prev.map((m) => (m.id === match.id ? { ...m, watched: nextWatched } : m)));
+    const { error } = await supabase.from('matches').update({ watched: nextWatched }).eq('id', match.id);
+    if (error) {
+      console.error('Error al actualizar el estado del match', error);
+      setMatches((prev) => prev.map((m) => (m.id === match.id ? { ...m, watched: !nextWatched } : m)));
     }
   }
 
@@ -318,7 +354,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
           />
         )
       ) : (
-        <MatchList matches={matches} itemCache={itemCache} />
+        <MatchList matches={matches} itemCache={itemCache} onToggleWatched={handleToggleWatched} />
       )}
 
       <MatchModal item={activeMatch} onClose={() => setActiveMatch(null)} />

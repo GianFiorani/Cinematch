@@ -1,4 +1,4 @@
-import type { LocalParticipant } from '@/types';
+import type { LocalParticipant, SavedRoom } from '@/types';
 
 const storageKey = (roomId: string) => `cinematch:participant:${roomId}`;
 
@@ -18,21 +18,34 @@ export function setLocalParticipant(roomId: string, participant: LocalParticipan
   window.localStorage.setItem(storageKey(roomId), JSON.stringify(participant));
 }
 
-const LAST_ROOM_KEY = 'cinematch:lastRoom';
+const SAVED_ROOMS_KEY = 'cinematch:saved_rooms';
 
-export function getLastRoomId(): string | null {
-  if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(LAST_ROOM_KEY);
+export function getSavedRooms(): SavedRoom[] {
+  if (typeof window === 'undefined') return [];
+  const raw = window.localStorage.getItem(SAVED_ROOMS_KEY);
+  if (!raw) return [];
+  try {
+    const rooms = JSON.parse(raw) as SavedRoom[];
+    return [...rooms].sort((a, b) => b.lastAccess.localeCompare(a.lastAccess));
+  } catch {
+    return [];
+  }
 }
 
-export function setLastRoomId(roomId: string) {
+export function upsertSavedRoom(entry: SavedRoom) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(LAST_ROOM_KEY, roomId);
+  const rooms = getSavedRooms().filter((r) => r.roomId !== entry.roomId);
+  rooms.unshift(entry);
+  window.localStorage.setItem(SAVED_ROOMS_KEY, JSON.stringify(rooms));
 }
 
-export function clearLastRoomId() {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(LAST_ROOM_KEY);
+// Drops saved-room entries that no longer point to an active room (closed/deleted),
+// so "Tus Salas Guardadas" never shows dead links.
+export function pruneSavedRooms(validRoomIds: string[]): SavedRoom[] {
+  if (typeof window === 'undefined') return [];
+  const pruned = getSavedRooms().filter((r) => validRoomIds.includes(r.roomId));
+  window.localStorage.setItem(SAVED_ROOMS_KEY, JSON.stringify(pruned));
+  return pruned;
 }
 
 const ONBOARDING_SEEN_KEY = 'cinematch:hasSeenOnboarding';

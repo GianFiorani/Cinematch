@@ -7,6 +7,7 @@ export interface Room {
   created_at: string;
   status: RoomStatus;
   type: MediaType;
+  name: string | null;
   genre_ids: number[] | null;
   decade: number | null;
   provider_ids: number[] | null;
@@ -33,6 +34,7 @@ export interface MatchRow {
   room_id: string;
   tmdb_id: number;
   created_at: string;
+  watched: boolean;
 }
 
 export interface TMDBGenre {
@@ -82,4 +84,11 @@ export interface TMDBItem {
 export interface LocalParticipant {
   id: string;
   nickname: string;
+}
+
+export interface SavedRoom {
+  roomId: string;
+  roomCode: string;
+  roomName: string;
+  lastAccess: string;
 }

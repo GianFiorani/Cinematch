@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useImperativeHandle } from 'react';
-import { motion, useAnimationControls, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
+import { animate, motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
 import Image from 'next/image';
 import { tmdbImageUrl, tmdbRuntime, tmdbTitle, tmdbYear } from '@/lib/tmdb';
 import type { TMDBItem, Vote } from '@/types';
@@ -22,36 +22,33 @@ const SWIPE_THRESHOLD = 120;
 
 export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
   ({ item, isTop, stackIndex, onSwiped, onShowDetail }, ref) => {
-    const controls = useAnimationControls();
     const x = useMotionValue(0);
+    const opacity = useMotionValue(1);
     const rotate = useTransform(x, [-300, 300], [-18, 18]);
     const likeOpacity = useTransform(x, [20, 120], [0, 1]);
     const nopeOpacity = useTransform(x, [-120, -20], [1, 0]);
 
+    // Animate the shared `x`/`opacity` MotionValues directly (via framer-motion's standalone
+    // `animate()`) instead of an AnimationControls + `animate` prop. Both `x` and the drag
+    // gesture already read/write the same MotionValue; driving it through a second "owner"
+    // (AnimationControls) is a known source of animations that silently never resolve.
+    function flyOut(vote: Vote, duration: number) {
+      const target = vote === 'like' ? 600 : -600;
+      animate(x, target, { duration });
+      animate(opacity, 0, { duration, onComplete: () => onSwiped(vote) });
+    }
+
     useImperativeHandle(ref, () => ({
-      swipe: (vote: Vote) => {
-        controls
-          .start({
-            x: vote === 'like' ? 600 : -600,
-            rotate: vote === 'like' ? 20 : -20,
-            opacity: 0,
-            transition: { duration: 0.3 },
-          })
-          .then(() => onSwiped(vote));
-      },
+      swipe: (vote: Vote) => flyOut(vote, 0.3),
     }));
 
     function handleDragEnd(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
       if (info.offset.x > SWIPE_THRESHOLD) {
-        controls
-          .start({ x: 600, rotate: 20, opacity: 0, transition: { duration: 0.25 } })
-          .then(() => onSwiped('like'));
+        flyOut('like', 0.25);
       } else if (info.offset.x < -SWIPE_THRESHOLD) {
-        controls
-          .start({ x: -600, rotate: -20, opacity: 0, transition: { duration: 0.25 } })
-          .then(() => onSwiped('dislike'));
+        flyOut('dislike', 0.25);
       } else {
-        controls.start({ x: 0, rotate: 0, transition: { type: 'spring', stiffness: 300, damping: 25 } });
+        animate(x, 0, { type: 'spring', stiffness: 300, damping: 25 });
       }
     }
 
@@ -63,6 +60,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
         className="absolute inset-0 origin-bottom select-none"
         style={{
           x: isTop ? x : undefined,
+          opacity: isTop ? opacity : 1,
           rotate: isTop ? rotate : 0,
           scale: 1 - stackIndex * 0.04,
           top: stackIndex * 10,
@@ -72,7 +70,6 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={1}
         onDragEnd={isTop ? handleDragEnd : undefined}
-        animate={controls}
       >
         <div className="relative h-full w-full overflow-hidden rounded-3xl bg-brand-surface shadow-2xl">
           {poster ? (
