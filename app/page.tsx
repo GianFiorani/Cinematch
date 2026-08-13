@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { OnboardingModal } from '@/components/OnboardingModal';
+import { InstallBanner } from '@/components/InstallBanner';
 import type { MediaType, SavedRoom, TMDBGenre, TMDBWatchProvider } from '@/types';
 
 export default function HomePage() {
@@ -314,6 +315,7 @@ export default function HomePage() {
       </Button>
 
       <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      <InstallBanner />
     </main>
   );
 }

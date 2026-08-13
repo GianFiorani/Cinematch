@@ -59,3 +59,20 @@ export function markOnboardingSeen() {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
 }
+
+const DISMISS_INSTALL_BANNER_KEY = 'cinematch:dismiss_install_banner';
+const DISMISS_INSTALL_BANNER_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function isInstallBannerDismissed(): boolean {
+  if (typeof window === 'undefined') return true;
+  const raw = window.localStorage.getItem(DISMISS_INSTALL_BANNER_KEY);
+  if (!raw) return false;
+  const dismissedAt = Number(raw);
+  if (Number.isNaN(dismissedAt)) return false;
+  return Date.now() - dismissedAt < DISMISS_INSTALL_BANNER_MS;
+}
+
+export function dismissInstallBanner() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(DISMISS_INSTALL_BANNER_KEY, String(Date.now()));
+}
