@@ -33,13 +33,22 @@ interface BeforeInstallPromptEvent extends Event {
 type BannerState =
   | { kind: 'hidden' }
   | { kind: 'in-app-browser' }
-  | { kind: 'ios' }
+  | { kind: 'ios-safari' }
+  | { kind: 'ios-other-browser' }
   | { kind: 'android-prompt'; promptEvent: BeforeInstallPromptEvent };
 
 // Apps like Instagram/TikTok/Facebook open links in a restricted in-app webview that can't
 // install PWAs (no beforeinstallprompt, no Safari share sheet) — users need to be told to
 // reopen in the real browser first.
 const IN_APP_BROWSER_UA = /Instagram|FBAN|FBAV|TikTok|BytedanceWebview|musical_ly/i;
+
+// Every iOS browser is a Safari/WebKit shell under the hood, but only Safari itself exposes
+// the "Add to Home Screen" install path — Chrome, Firefox, Edge, Opera, etc. on iOS can't
+// install PWAs at all, even though they render the site fine. Each of them tags its UA with
+// its own token, which is how we tell them apart from real Safari.
+// Note: Brave for iOS deliberately mirrors Safari's UA (no distinguishing token), so it's
+// indistinguishable from Safari here — a known gap, not an oversight.
+const NON_SAFARI_IOS_BROWSER_UA = /CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|YaBrowser|mercury/i;
 
 function isStandalone(): boolean {
   const displayModeStandalone = window.matchMedia('(display-mode: standalone)').matches;
@@ -60,6 +69,7 @@ export function InstallBanner() {
   const [installed, setInstalled] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [promptEvent, setPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -86,7 +96,11 @@ export function InstallBanner() {
     if (!mounted || installed || dismissed || isStandalone()) return { kind: 'hidden' };
     if (IN_APP_BROWSER_UA.test(window.navigator.userAgent)) return { kind: 'in-app-browser' };
     if (promptEvent) return { kind: 'android-prompt', promptEvent };
-    if (isIOS()) return { kind: 'ios' };
+    if (isIOS()) {
+      return NON_SAFARI_IOS_BROWSER_UA.test(window.navigator.userAgent)
+        ? { kind: 'ios-other-browser' }
+        : { kind: 'ios-safari' };
+    }
     return { kind: 'hidden' };
   }, [mounted, installed, dismissed, promptEvent]);
 
@@ -95,6 +109,16 @@ export function InstallBanner() {
     await state.promptEvent.prompt();
     await state.promptEvent.userChoice;
     setPromptEvent(null);
+  }
+
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API not available or blocked; the visible instruction remains as fallback.
+    }
   }
 
   function handleDismiss() {
@@ -112,7 +136,9 @@ export function InstallBanner() {
           transition={{ type: 'spring', stiffness: 300, damping: 26 }}
           className={clsx(
             'fixed bottom-4 left-4 right-4 z-50 mx-auto flex max-w-md gap-2 border border-brand-pink/40 bg-brand-dark text-white shadow-lg shadow-black/40',
-            state.kind === 'ios' ? 'items-start rounded-2xl px-4 py-3 text-xs' : 'items-center rounded-full px-3 py-2 text-xs'
+            state.kind === 'ios-safari' || state.kind === 'ios-other-browser'
+              ? 'items-start rounded-2xl px-4 py-3 text-xs'
+              : 'items-center rounded-full px-3 py-2 text-xs'
           )}
         >
           <span className="shrink-0 text-base leading-none">🍿</span>
@@ -120,13 +146,24 @@ export function InstallBanner() {
           {state.kind === 'in-app-browser' && (
             <span className="flex-1 truncate">Para instalar, abrilo en Safari/Chrome ↗️</span>
           )}
-          {state.kind === 'ios' && (
+          {state.kind === 'ios-safari' && (
             <div className="flex-1 space-y-0.5">
               <p className="font-semibold">Para instalar en tu iPhone:</p>
               <p className="flex items-center gap-1">
                 1. Tocá <ShareIcon /> Compartir
               </p>
               <p>2. Elegí &quot;Agregar a inicio&quot;</p>
+            </div>
+          )}
+          {state.kind === 'ios-other-browser' && (
+            <div className="flex-1 space-y-1.5">
+              <p>Para instalar en tu iPhone, abrí este link en Safari 🧭</p>
+              <button
+                onClick={handleCopyLink}
+                className="rounded-full border border-white/20 px-2.5 py-1 text-[11px] font-semibold text-white"
+              >
+                {copied ? '¡Copiado!' : 'Copiar link'}
+              </button>
             </div>
           )}
           {state.kind === 'android-prompt' && (
