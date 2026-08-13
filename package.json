@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@serwist/cli": "^9.5.12",
+    "@serwist/next": "^9.5.12",
     "@supabase/supabase-js": "^2.45.4",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
@@ -16,7 +18,8 @@
     "next": "^14.2.5",
     "qrcode.react": "^3.1.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "serwist": "^9.5.12"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",

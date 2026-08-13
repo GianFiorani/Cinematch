@@ -5,6 +5,18 @@ export const metadata: Metadata = {
   title: 'CineMatch — Decidí qué ver, sin pelear',
   description:
     'Creá una sala, invitá a tu pareja o amigos y encontrá con un swipe la película o serie que todos quieren ver.',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'CineMatch',
+  },
+  icons: {
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = {
