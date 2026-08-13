@@ -48,6 +48,15 @@ export function pruneSavedRooms(validRoomIds: string[]): SavedRoom[] {
   return pruned;
 }
 
+// User-initiated removal from "Tus Salas Guardadas" (the trash button), as opposed to the
+// automatic pruning above.
+export function removeSavedRoom(roomId: string): SavedRoom[] {
+  if (typeof window === 'undefined') return [];
+  const remaining = getSavedRooms().filter((r) => r.roomId !== roomId);
+  window.localStorage.setItem(SAVED_ROOMS_KEY, JSON.stringify(remaining));
+  return remaining;
+}
+
 const ONBOARDING_SEEN_KEY = 'cinematch:hasSeenOnboarding';
 
 export function hasSeenOnboarding(): boolean {

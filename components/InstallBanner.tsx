@@ -2,7 +2,28 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import clsx from 'clsx';
 import { dismissInstallBanner, isInstallBannerDismissed } from '@/lib/participant';
+
+// iOS's "Share" glyph (square.and.arrow.up): an up arrow over an open-top tray. Rendering it
+// inline makes the instruction below unmistakable instead of relying on a generic emoji.
+function ShareIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5 shrink-0"
+    >
+      <path d="M12 2v13" />
+      <path d="M8 6l4-4 4 4" />
+      <path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" />
+    </svg>
+  );
+}
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -89,7 +110,10 @@ export function InstallBanner() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 40, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-          className="fixed bottom-4 left-4 right-4 z-50 mx-auto flex max-w-md items-center gap-2 rounded-full border border-brand-pink/40 bg-brand-dark px-3 py-2 text-xs text-white shadow-lg shadow-black/40"
+          className={clsx(
+            'fixed bottom-4 left-4 right-4 z-50 mx-auto flex max-w-md gap-2 border border-brand-pink/40 bg-brand-dark text-white shadow-lg shadow-black/40',
+            state.kind === 'ios' ? 'items-start rounded-2xl px-4 py-3 text-xs' : 'items-center rounded-full px-3 py-2 text-xs'
+          )}
         >
           <span className="shrink-0 text-base leading-none">🍿</span>
 
@@ -97,7 +121,13 @@ export function InstallBanner() {
             <span className="flex-1 truncate">Para instalar, abrilo en Safari/Chrome ↗️</span>
           )}
           {state.kind === 'ios' && (
-            <span className="flex-1 truncate">Para instalar: tocá ⬆️ y &quot;Agregar a inicio&quot;</span>
+            <div className="flex-1 space-y-0.5">
+              <p className="font-semibold">Para instalar en tu iPhone:</p>
+              <p className="flex items-center gap-1">
+                1. Tocá <ShareIcon /> Compartir
+              </p>
+              <p>2. Elegí &quot;Agregar a inicio&quot;</p>
+            </div>
           )}
           {state.kind === 'android-prompt' && (
             <>

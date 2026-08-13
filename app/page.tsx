@@ -11,6 +11,7 @@ import {
   hasSeenOnboarding,
   markOnboardingSeen,
   pruneSavedRooms,
+  removeSavedRoom,
   setLocalParticipant,
 } from '@/lib/participant';
 import { Button } from '@/components/ui/Button';
@@ -99,6 +100,10 @@ export default function HomePage() {
     setProviderIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
   }
 
+  function handleRemoveSavedRoom(roomId: string) {
+    setSavedRooms(removeSavedRoom(roomId));
+  }
+
   async function handleCreateRoom() {
     setLoading(true);
     setError(null);
@@ -162,17 +167,28 @@ export default function HomePage() {
             <span className="mb-2 block text-sm font-medium text-white/70">Tus Salas Guardadas</span>
             <div className="flex flex-col gap-2">
               {savedRooms.map((saved) => (
-                <button
+                <div
                   key={saved.roomId}
-                  onClick={() => router.push(`/room/${saved.roomId}`)}
-                  className="flex w-full items-center justify-between rounded-xl border border-brand-pink/40 bg-brand-surface px-4 py-3 text-left"
+                  className="flex w-full items-center gap-2 rounded-xl border border-brand-pink/40 bg-brand-surface px-4 py-3"
                 >
-                  <span>
-                    <span className="block text-sm font-semibold text-white">{saved.roomName}</span>
-                    <span className="block text-xs text-white/50">Código {saved.roomCode}</span>
-                  </span>
-                  <span className="text-brand-pink">→</span>
-                </button>
+                  <button
+                    onClick={() => router.push(`/room/${saved.roomId}`)}
+                    className="flex flex-1 items-center justify-between gap-3 text-left"
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-white">{saved.roomName}</span>
+                      <span className="block text-xs text-white/50">Código {saved.roomCode}</span>
+                    </span>
+                    <span className="text-brand-pink">→</span>
+                  </button>
+                  <button
+                    onClick={() => handleRemoveSavedRoom(saved.roomId)}
+                    aria-label={`Eliminar ${saved.roomName} de tus salas guardadas`}
+                    className="shrink-0 rounded-full p-1.5 text-white/40 hover:text-nope"
+                  >
+                    🗑️
+                  </button>
+                </div>
               ))}
             </div>
           </div>
