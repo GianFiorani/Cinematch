@@ -85,3 +85,27 @@ export function dismissInstallBanner() {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(DISMISS_INSTALL_BANNER_KEY, String(Date.now()));
 }
+
+const SEEN_MOVIES_KEY = 'cinematch:seen_movies';
+
+// Personal "I've already seen this" list, distinct from a room's shared `matches.watched`
+// flag: this one is per-user and follows them across every room and session, so a title
+// never resurfaces in the deck once they've marked it.
+export function getSeenMovieIds(): number[] {
+  if (typeof window === 'undefined') return [];
+  const raw = window.localStorage.getItem(SEEN_MOVIES_KEY);
+  if (!raw) return [];
+  try {
+    const ids = JSON.parse(raw);
+    return Array.isArray(ids) ? ids : [];
+  } catch {
+    return [];
+  }
+}
+
+export function markMovieSeen(tmdbId: number) {
+  if (typeof window === 'undefined') return;
+  const ids = getSeenMovieIds();
+  if (ids.includes(tmdbId)) return;
+  window.localStorage.setItem(SEEN_MOVIES_KEY, JSON.stringify([...ids, tmdbId]));
+}

@@ -1,4 +1,4 @@
-import type { MediaType, TMDBGenre, TMDBItem, TMDBWatchProvider } from '@/types';
+import type { MediaType, Room, RoomFilters, TMDBGenre, TMDBItem, TMDBWatchProvider } from '@/types';
 
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -49,21 +49,32 @@ export async function fetchGenres(type: MediaType): Promise<TMDBGenre[]> {
   return data.genres as TMDBGenre[];
 }
 
+export interface DiscoverPage {
+  results: TMDBItem[];
+  totalPages: number;
+}
+
 export async function fetchDiscover(
   type: MediaType,
-  genreIds: number[] | null,
-  page = 1,
-  decade: number | null = null,
-  providerIds: number[] | null = null
-): Promise<TMDBItem[]> {
+  filters: RoomFilters,
+  page = 1
+): Promise<DiscoverPage> {
   const params = new URLSearchParams({ mode: 'discover', type, page: String(page) });
-  if (genreIds && genreIds.length > 0) params.set('genre', genreIds.join(','));
-  if (decade) params.set('decade', String(decade));
-  if (providerIds && providerIds.length > 0) params.set('provider', providerIds.join(','));
+  if (filters.genreIds && filters.genreIds.length > 0) params.set('genre', filters.genreIds.join(','));
+  if (filters.decade) params.set('decade', String(filters.decade));
+  if (filters.providerIds && filters.providerIds.length > 0) {
+    params.set('provider', filters.providerIds.join(','));
+  }
   const res = await fetch(`/api/tmdb?${params.toString()}`);
   if (!res.ok) throw new Error('No se pudo cargar el catálogo de TMDB');
   const data = await res.json();
-  return data.results as TMDBItem[];
+  return { results: data.results as TMDBItem[], totalPages: data.totalPages as number };
+}
+
+// Rooms created before the collaborative-filters feature have `filters: null` — fall back to
+// the original per-column values so they keep working exactly as before, unmigrated.
+export function resolveRoomFilters(room: Room): RoomFilters {
+  return room.filters ?? { genreIds: room.genre_ids, decade: room.decade, providerIds: room.provider_ids };
 }
 
 export async function fetchProviders(type: MediaType): Promise<TMDBWatchProvider[]> {

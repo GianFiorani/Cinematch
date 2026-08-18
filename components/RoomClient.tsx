@@ -1,12 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
-import { fetchDiscover, fetchItem } from '@/lib/tmdb';
+import { fetchDiscover, fetchItem, resolveRoomFilters } from '@/lib/tmdb';
 import {
   getLocalParticipant,
+  getSeenMovieIds,
   hasSeenOnboarding,
+  markMovieSeen,
   markOnboardingSeen,
   upsertSavedRoom,
 } from '@/lib/participant';
@@ -14,16 +17,18 @@ import { NicknameGate } from './NicknameGate';
 import { SwipeDeck } from './SwipeDeck';
 import { MatchModal } from './MatchModal';
 import { MatchList } from './MatchList';
+import { FiltersDrawer } from './FiltersDrawer';
 import { AmbientGlow } from './AmbientGlow';
 import { OnboardingModal } from './OnboardingModal';
 import { QRCode } from './ui/QRCode';
 import { Spinner } from './ui/Spinner';
-import type { LocalParticipant, MatchRow, Room, TMDBItem, Vote } from '@/types';
+import type { LocalParticipant, MatchRow, Room, RoomFilters, TMDBItem, Vote } from '@/types';
 
 type LoadState = 'loading' | 'ready' | 'not-found';
 type Tab = 'swipe' | 'matches';
 
 export function RoomClient({ roomId }: { roomId: string }) {
+  const router = useRouter();
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [room, setRoom] = useState<Room | null>(null);
   const [participant, setParticipant] = useState<LocalParticipant | null>(null);
@@ -38,6 +43,15 @@ export function RoomClient({ roomId }: { roomId: string }) {
   const [onlineCount, setOnlineCount] = useState(1);
   const [currentPoster, setCurrentPoster] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Pagination bookkeeping for the background "top up the deck" fetch below. Refs, not state:
+  // none of this needs to trigger a re-render on its own — `items.length` already does that.
+  const nextPageRef = useRef(3);
+  const totalPagesRef = useRef<number | null>(null);
+  const excludedIdsRef = useRef<Set<number>>(new Set());
+  const loadingMoreRef = useRef(false);
+  const catalogLoadingRef = useRef(false);
 
   const handleTopItemChange = useCallback((item: TMDBItem | null) => {
     setCurrentPoster(item?.poster_path ?? null);
@@ -69,6 +83,28 @@ export function RoomClient({ roomId }: { roomId: string }) {
       cancelled = true;
     };
   }, [roomId]);
+
+  // Collaborative filters: any participant can edit them (see handleSaveFilters), and this
+  // keeps every other client's `room` state in sync so the catalog-rebuild effect below
+  // (keyed on `room`) fires for everyone the moment someone saves new filters.
+  useEffect(() => {
+    if (!room) return;
+    const roomId = room.id;
+    const channel = supabase
+      .channel(`room:${roomId}:filters`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+        (payload) => {
+          setRoom(payload.new as Room);
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.id]);
 
   // Record/refresh this room in the "Tus Salas Guardadas" list on the home screen —
   // covers the host right after creating it, a guest right after joining, and every
@@ -180,12 +216,18 @@ export function RoomClient({ roomId }: { roomId: string }) {
   useEffect(() => {
     if (!room || !participant) return;
     let cancelled = false;
+    // Set synchronously (not just via setLoadingCatalog below) so the top-up effect — which
+    // runs in the same commit, right after this one — sees it immediately. Relying on the
+    // `loadingCatalog` state alone left a one-render gap where it was still `false`, letting
+    // the top-up effect fire an unwanted extra page fetch before the initial load even started.
+    catalogLoadingRef.current = true;
     (async () => {
       setLoadingCatalog(true);
       try {
+        const filters = resolveRoomFilters(room);
         const [page1, page2] = await Promise.all([
-          fetchDiscover(room.type, room.genre_ids, 1, room.decade, room.provider_ids),
-          fetchDiscover(room.type, room.genre_ids, 2, room.decade, room.provider_ids),
+          fetchDiscover(room.type, filters, 1),
+          fetchDiscover(room.type, filters, 2),
         ]);
         const { data: mySwipes } = await supabase
           .from('swipes')
@@ -195,14 +237,24 @@ export function RoomClient({ roomId }: { roomId: string }) {
         if (cancelled) return;
 
         const alreadySwiped = new Set((mySwipes ?? []).map((s) => s.tmdb_id));
+        // Titles this participant marked "Ya la vi" — a personal, cross-room block list,
+        // separate from this room's own swipe history.
+        const seenMovies = new Set(getSeenMovieIds());
         const seen = new Set<number>();
-        const combined = [...page1, ...page2].filter((item) => {
-          if (seen.has(item.id) || alreadySwiped.has(item.id)) return false;
+        const combined = [...page1.results, ...page2.results].filter((item) => {
+          if (seen.has(item.id) || alreadySwiped.has(item.id) || seenMovies.has(item.id)) return false;
           seen.add(item.id);
           return true;
         });
+        // Everything ever handed to the deck this session stays excluded from later pages,
+        // even after it's swiped away and removed from `items` — otherwise a later TMDB page
+        // could hand back a title the user already voted on.
+        excludedIdsRef.current = new Set([...alreadySwiped, ...seenMovies, ...combined.map((item) => item.id)]);
+        totalPagesRef.current = page2.totalPages;
+        nextPageRef.current = 3;
         setItems(combined);
       } finally {
+        catalogLoadingRef.current = false;
         if (!cancelled) setLoadingCatalog(false);
       }
     })();
@@ -210,6 +262,40 @@ export function RoomClient({ roomId }: { roomId: string }) {
       cancelled = true;
     };
   }, [room, participant]);
+
+  // Keep the deck topped up: once fewer than 5 cards remain, pull the next TMDB page in the
+  // background so the user never runs out mid-swipe. This cascades naturally — appending even
+  // one fresh item bumps `items.length`, which re-triggers this effect if still under 5.
+  useEffect(() => {
+    if (!room || !participant || loadingCatalog || catalogLoadingRef.current) return;
+    if (items.length >= 5) return;
+    if (loadingMoreRef.current) return;
+    if (totalPagesRef.current !== null && nextPageRef.current > totalPagesRef.current) return;
+
+    loadingMoreRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const page = nextPageRef.current;
+        const { results, totalPages } = await fetchDiscover(room.type, resolveRoomFilters(room), page);
+        if (cancelled) return;
+        totalPagesRef.current = totalPages;
+        nextPageRef.current = page + 1;
+        const fresh = results.filter((item) => !excludedIdsRef.current.has(item.id));
+        fresh.forEach((item) => excludedIdsRef.current.add(item.id));
+        if (fresh.length > 0) setItems((prev) => [...prev, ...fresh]);
+      } catch (err) {
+        console.error('Error al pedir más películas de TMDB', err);
+      } finally {
+        // Always release the lock, even if this run was superseded (`cancelled`) — otherwise
+        // a swipe that lands mid-fetch would permanently wedge future top-up attempts.
+        loadingMoreRef.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [room, participant, loadingCatalog, items.length]);
 
   async function handleVote(item: TMDBItem, vote: Vote) {
     if (!room || !participant) return;
@@ -227,6 +313,32 @@ export function RoomClient({ roomId }: { roomId: string }) {
     if (error && error.code !== '23505') {
       console.error('Error al registrar el swipe', error);
     }
+  }
+
+  function handleMarkAsSeen(item: TMDBItem) {
+    markMovieSeen(item.id);
+    // Same treatment as a vote: drop it from the deck's own source of truth so it can't
+    // resurface on a tab-switch remount. No swipe row is written — this participant simply
+    // opts out of matching on this title, they haven't voted like/dislike on it.
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+  }
+
+  function handleMarkMatchAsSeen() {
+    if (activeMatch) markMovieSeen(activeMatch.id);
+    setActiveMatch(null);
+  }
+
+  async function handleSaveFilters(filters: RoomFilters) {
+    if (!room) return;
+    const { error } = await supabase.from('rooms').update({ filters }).eq('id', room.id);
+    if (error) {
+      console.error('Error al guardar los filtros de la sala', error);
+      return;
+    }
+    // The realtime subscription above will also apply this via postgres_changes, but that
+    // round-trip can lag — update local state immediately so the editor's own deck rebuilds
+    // right away instead of waiting on it.
+    setRoom((prev) => (prev ? { ...prev, filters } : prev));
   }
 
   async function handleToggleWatched(match: MatchRow) {
@@ -300,13 +412,22 @@ export function RoomClient({ roomId }: { roomId: string }) {
       <AmbientGlow posterPath={tab === 'swipe' ? currentPoster : null} />
 
       <header className="flex items-center justify-between px-5 pt-6">
-        <div>
-          <h1 className="text-lg font-bold">
-            {room.type === 'movie' ? 'Películas' : 'Series'}
-          </h1>
-          <p className="text-xs text-white/50">
-            🟢 {onlineCount} {onlineCount === 1 ? 'persona' : 'personas'} en la sala
-          </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push('/')}
+            aria-label="Volver al inicio"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-brand-surface text-lg"
+          >
+            ←
+          </button>
+          <div>
+            <h1 className="text-lg font-bold">
+              {room.type === 'movie' ? 'Películas' : 'Series'}
+            </h1>
+            <p className="text-xs text-white/50">
+              🟢 {onlineCount} {onlineCount === 1 ? 'persona' : 'personas'} en la sala
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -315,6 +436,13 @@ export function RoomClient({ roomId }: { roomId: string }) {
             className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-brand-surface text-lg"
           >
             ❓
+          </button>
+          <button
+            onClick={() => setFiltersOpen(true)}
+            aria-label="Filtros de la sala"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-brand-surface text-lg"
+          >
+            🎛️
           </button>
           <button
             onClick={() => setShareOpen(true)}
@@ -350,6 +478,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
             items={items}
             type={room.type}
             onVote={handleVote}
+            onMarkSeen={handleMarkAsSeen}
             onTopItemChange={handleTopItemChange}
           />
         )
@@ -357,8 +486,15 @@ export function RoomClient({ roomId }: { roomId: string }) {
         <MatchList matches={matches} itemCache={itemCache} onToggleWatched={handleToggleWatched} />
       )}
 
-      <MatchModal item={activeMatch} onClose={() => setActiveMatch(null)} />
+      <MatchModal item={activeMatch} onClose={() => setActiveMatch(null)} onMarkSeen={handleMarkMatchAsSeen} />
       <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
+      <FiltersDrawer
+        open={filtersOpen}
+        type={room.type}
+        filters={resolveRoomFilters(room)}
+        onClose={() => setFiltersOpen(false)}
+        onSave={handleSaveFilters}
+      />
 
       {shareOpen && (
         <div

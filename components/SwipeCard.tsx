@@ -16,12 +16,13 @@ interface SwipeCardProps {
   stackIndex: number;
   onSwiped: (vote: Vote) => void;
   onShowDetail: (item: TMDBItem) => void;
+  onMarkSeen: (item: TMDBItem) => void;
 }
 
 const SWIPE_THRESHOLD = 120;
 
 export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
-  ({ item, isTop, stackIndex, onSwiped, onShowDetail }, ref) => {
+  ({ item, isTop, stackIndex, onSwiped, onShowDetail, onMarkSeen }, ref) => {
     const x = useMotionValue(0);
     const opacity = useMotionValue(1);
     const rotate = useTransform(x, [-300, 300], [-18, 18]);
@@ -114,6 +115,17 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(
                 className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-lg text-white backdrop-blur-sm"
               >
                 ℹ️
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkSeen(item);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label="Marcar como ya vista"
+                className="absolute right-14 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-lg text-white backdrop-blur-sm"
+              >
+                👁️
               </button>
             </>
           )}

@@ -10,10 +10,11 @@ interface SwipeDeckProps {
   items: TMDBItem[];
   type: MediaType;
   onVote: (item: TMDBItem, vote: Vote) => void;
+  onMarkSeen: (item: TMDBItem) => void;
   onTopItemChange?: (item: TMDBItem | null) => void;
 }
 
-export function SwipeDeck({ items, type, onVote, onTopItemChange }: SwipeDeckProps) {
+export function SwipeDeck({ items, type, onVote, onMarkSeen, onTopItemChange }: SwipeDeckProps) {
   const topRef = useRef<SwipeCardHandle>(null);
   const [detailItem, setDetailItem] = useState<TMDBItem | null>(null);
   const [detailFull, setDetailFull] = useState<TMDBItem | null>(null);
@@ -73,6 +74,7 @@ export function SwipeDeck({ items, type, onVote, onTopItemChange }: SwipeDeckPro
             stackIndex={i}
             onSwiped={(vote) => handleSwiped(item, vote)}
             onShowDetail={handleShowDetail}
+            onMarkSeen={onMarkSeen}
           />
         ))}
       </div>

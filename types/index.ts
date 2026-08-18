@@ -2,6 +2,12 @@ export type MediaType = 'movie' | 'tv';
 export type Vote = 'like' | 'dislike';
 export type RoomStatus = 'active' | 'closed';
 
+export interface RoomFilters {
+  genreIds: number[] | null;
+  decade: number | null;
+  providerIds: number[] | null;
+}
+
 export interface Room {
   id: string;
   created_at: string;
@@ -11,6 +17,7 @@ export interface Room {
   genre_ids: number[] | null;
   decade: number | null;
   provider_ids: number[] | null;
+  filters: RoomFilters | null;
 }
 
 export interface Participant {

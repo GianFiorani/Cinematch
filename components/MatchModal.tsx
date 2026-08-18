@@ -11,11 +11,12 @@ import type { TMDBItem } from '@/types';
 interface MatchModalProps {
   item: TMDBItem | null;
   onClose: () => void;
+  onMarkSeen: () => void;
 }
 
 const CONFETTI_COLORS = ['#FD267A', '#FF6036', '#31D0AA', '#FFD166'];
 
-export function MatchModal({ item, onClose }: MatchModalProps) {
+export function MatchModal({ item, onClose, onMarkSeen }: MatchModalProps) {
   const poster = item ? tmdbImageUrl(item.poster_path, 'w500') : null;
 
   useEffect(() => {
@@ -84,6 +85,9 @@ export function MatchModal({ item, onClose }: MatchModalProps) {
             <Button onClick={onClose} className="mt-6 w-full">
               Seguir viendo
             </Button>
+            <button onClick={onMarkSeen} className="mt-3 text-sm text-white/50">
+              👁️ Ya la vi
+            </button>
           </motion.div>
         </motion.div>
       )}

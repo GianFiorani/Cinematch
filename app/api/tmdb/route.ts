@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const LANGUAGE = 'es-ES';
 const WATCH_REGION = 'AR';
+// TMDB rejects `page` above this regardless of what `total_pages` in a response claims
+// (discover's total_pages reflects the full catalog size, not the paginable range).
+const TMDB_MAX_PAGE = 500;
 
 interface TMDBWatchProvidersResponse {
   results?: Record<
@@ -219,7 +222,8 @@ export async function GET(request: NextRequest) {
 
     if (mode === 'discover') {
       const genre = searchParams.get('genre');
-      const page = searchParams.get('page') ?? '1';
+      const requestedPage = Number(searchParams.get('page') ?? '1');
+      const page = String(Math.min(Math.max(requestedPage, 1), TMDB_MAX_PAGE));
       const decade = searchParams.get('decade');
       const provider = searchParams.get('provider');
       const region = searchParams.get('region') || WATCH_REGION;
@@ -279,7 +283,11 @@ export async function GET(request: NextRequest) {
         })
       );
 
-      return NextResponse.json({ results });
+      // `total_pages` reflects the full catalog size and can run into the tens of thousands —
+      // clamp it to what's actually requestable so the client's background pagination knows
+      // when to stop instead of eventually requesting a page TMDB will reject.
+      const totalPages = Math.min(data.total_pages ?? 1, TMDB_MAX_PAGE);
+      return NextResponse.json({ results, totalPages });
     }
 
     return NextResponse.json({ error: 'mode debe ser "genres", "discover" o "item"' }, { status: 400 });

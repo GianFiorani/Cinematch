@@ -111,14 +111,18 @@ export default function HomePage() {
       const finalNickname = nickname.trim() || 'Host';
       const finalRoomName = roomName.trim() || `Sala de ${finalNickname}`;
 
+      const finalGenreIds = genreIds.length > 0 ? genreIds : null;
+      const finalProviderIds = providerIds.length > 0 ? providerIds : null;
+
       const { data: room, error: roomError } = await supabase
         .from('rooms')
         .insert({
           type,
           name: finalRoomName,
-          genre_ids: genreIds.length > 0 ? genreIds : null,
+          genre_ids: finalGenreIds,
           decade,
-          provider_ids: providerIds.length > 0 ? providerIds : null,
+          provider_ids: finalProviderIds,
+          filters: { genreIds: finalGenreIds, decade, providerIds: finalProviderIds },
         })
         .select()
         .single();

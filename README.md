@@ -65,6 +65,19 @@ matches automáticamente y activa las suscripciones Realtime.
 > create policy "anyone can mark a match as watched" on public.matches
 >   for update using (true) with check (true);
 > ```
+>
+> Y si ya tenías `rooms` creada de antes (sin filtros colaborativos editables después de crear
+> la sala), corré esto — `filters` guarda `{ genreIds, decade, providerIds }` como JSON;
+> mientras esté en `null` (salas viejas) la app sigue usando las columnas sueltas de siempre.
+> `rooms` necesita entrar a la publicación de Realtime para que el cambio de filtros de un
+> participante le llegue en vivo a los demás:
+>
+> ```sql
+> alter table public.rooms add column if not exists filters jsonb;
+> create policy "any participant can update room filters" on public.rooms
+>   for update using (true) with check (true);
+> alter publication supabase_realtime add table public.rooms;
+> ```
 
 ```sql
 -- CineMatch — schema completo
@@ -83,7 +96,8 @@ create table if not exists public.rooms (
   name text,
   genre_ids integer[],
   decade integer,
-  provider_ids integer[]
+  provider_ids integer[],
+  filters jsonb
 );
 
 create table if not exists public.participants (
@@ -176,6 +190,8 @@ create policy "rooms are readable by anyone" on public.rooms
   for select using (true);
 create policy "anyone can create a room" on public.rooms
   for insert with check (true);
+create policy "any participant can update room filters" on public.rooms
+  for update using (true) with check (true);
 
 create policy "participants are readable by anyone" on public.participants
   for select using (true);
@@ -198,12 +214,13 @@ create policy "anyone can mark a match as watched" on public.matches
 -- ─────────────────────────────────────────────
 -- Realtime
 -- Activa la replicación para que la app reciba eventos INSERT de nuevos
--- participantes y de matches en tiempo real.
+-- participantes y de matches en tiempo real, y UPDATE de filtros de sala.
 -- ─────────────────────────────────────────────
 
 alter publication supabase_realtime add table public.participants;
 alter publication supabase_realtime add table public.swipes;
 alter publication supabase_realtime add table public.matches;
+alter publication supabase_realtime add table public.rooms;
 ```
 
 ## 4. Correr en local
