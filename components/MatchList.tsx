@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import clsx from 'clsx';
 import { tmdbImageUrl, tmdbTitle, tmdbYear } from '@/lib/tmdb';
+import { MatchSpinner } from './MatchSpinner';
 import type { MatchRow, TMDBItem } from '@/types';
 
 interface MatchListProps {
@@ -12,6 +14,8 @@ interface MatchListProps {
 }
 
 export function MatchList({ matches, itemCache, onToggleWatched }: MatchListProps) {
+  const [spinnerOpen, setSpinnerOpen] = useState(false);
+
   if (matches.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-8 text-center text-white/50">
@@ -23,6 +27,14 @@ export function MatchList({ matches, itemCache, onToggleWatched }: MatchListProp
 
   return (
     <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-4">
+      {matches.length >= 2 && (
+        <button
+          onClick={() => setSpinnerOpen(true)}
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-pink to-brand-orange px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-pink/20 transition-transform active:scale-95"
+        >
+          🎲 Sortear qué ver hoy
+        </button>
+      )}
       <ul className="flex flex-col gap-3">
         {matches
           .slice()
@@ -60,6 +72,13 @@ export function MatchList({ matches, itemCache, onToggleWatched }: MatchListProp
             );
           })}
       </ul>
+
+      <MatchSpinner
+        open={spinnerOpen}
+        matches={matches}
+        itemCache={itemCache}
+        onClose={() => setSpinnerOpen(false)}
+      />
     </div>
   );
 }

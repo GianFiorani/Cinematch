@@ -8,6 +8,16 @@ export interface RoomFilters {
   providerIds: number[] | null;
 }
 
+// Superset of RoomFilters used for one-off queries (situation presets) that need more than
+// the room's own collaborative filters — a RoomFilters value is always a valid DiscoverQuery.
+export interface DiscoverQuery extends RoomFilters {
+  sortBy?: string;
+  runtimeLte?: number;
+  voteAverageGte?: number;
+  voteCountGte?: number;
+  voteCountLte?: number;
+}
+
 export interface Room {
   id: string;
   created_at: string;

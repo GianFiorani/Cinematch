@@ -227,11 +227,22 @@ export async function GET(request: NextRequest) {
       const decade = searchParams.get('decade');
       const provider = searchParams.get('provider');
       const region = searchParams.get('region') || WATCH_REGION;
+      const sortBy = searchParams.get('sortBy');
+      const runtimeLte = searchParams.get('runtimeLte');
+      const voteAverageGte = searchParams.get('voteAverageGte');
+      const voteCountGte = searchParams.get('voteCountGte');
+      const voteCountLte = searchParams.get('voteCountLte');
       const discoverParams: Record<string, string> = {
-        sort_by: 'popularity.desc',
+        sort_by: sortBy || 'popularity.desc',
         include_adult: 'false',
         page,
       };
+      // `with_runtime` only exists on discover/movie — TMDB has no equivalent for TV, since
+      // episode runtime isn't a discover-level filter there.
+      if (runtimeLte && type === 'movie') discoverParams['with_runtime.lte'] = runtimeLte;
+      if (voteAverageGte) discoverParams['vote_average.gte'] = voteAverageGte;
+      if (voteCountGte) discoverParams['vote_count.gte'] = voteCountGte;
+      if (voteCountLte) discoverParams['vote_count.lte'] = voteCountLte;
       // Same AND/OR nuance as with_genres: TMDB needs pipe-separated ids for "any of these
       // platforms", and watch_region is required for with_watch_providers to take effect at all.
       if (provider) {

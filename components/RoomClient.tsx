@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
-import { fetchDiscover, fetchItem, resolveRoomFilters } from '@/lib/tmdb';
+import { fetchDiscover, fetchItem, resolveRoomFilters, SITUATION_PRESETS, type PresetKey } from '@/lib/tmdb';
 import {
   getLocalParticipant,
   getSeenMovieIds,
@@ -44,6 +44,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
   const [currentPoster, setCurrentPoster] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activePreset, setActivePreset] = useState<PresetKey | null>(null);
 
   // Pagination bookkeeping for the background "top up the deck" fetch below. Refs, not state:
   // none of this needs to trigger a re-render on its own — `items.length` already does that.
@@ -56,6 +57,18 @@ export function RoomClient({ roomId }: { roomId: string }) {
   const handleTopItemChange = useCallback((item: TMDBItem | null) => {
     setCurrentPoster(item?.poster_path ?? null);
   }, []);
+
+  // A situation preset (see the chip row below) fully overrides the room's own collaborative
+  // filters for this participant's session only — it's never written to Supabase.
+  function getEffectiveQuery(currentRoom: Room) {
+    if (!activePreset) return resolveRoomFilters(currentRoom);
+    const preset = SITUATION_PRESETS.find((p) => p.key === activePreset);
+    return preset ? preset.getQuery(currentRoom.type) : resolveRoomFilters(currentRoom);
+  }
+
+  function handleTogglePreset(key: PresetKey) {
+    setActivePreset((prev) => (prev === key ? null : key));
+  }
 
   useEffect(() => {
     if (!hasSeenOnboarding()) {
@@ -224,10 +237,10 @@ export function RoomClient({ roomId }: { roomId: string }) {
     (async () => {
       setLoadingCatalog(true);
       try {
-        const filters = resolveRoomFilters(room);
+        const query = getEffectiveQuery(room);
         const [page1, page2] = await Promise.all([
-          fetchDiscover(room.type, filters, 1),
-          fetchDiscover(room.type, filters, 2),
+          fetchDiscover(room.type, query, 1),
+          fetchDiscover(room.type, query, 2),
         ]);
         const { data: mySwipes } = await supabase
           .from('swipes')
@@ -261,7 +274,8 @@ export function RoomClient({ roomId }: { roomId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [room, participant]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, participant, activePreset]);
 
   // Keep the deck topped up: once fewer than 5 cards remain, pull the next TMDB page in the
   // background so the user never runs out mid-swipe. This cascades naturally — appending even
@@ -277,7 +291,7 @@ export function RoomClient({ roomId }: { roomId: string }) {
     (async () => {
       try {
         const page = nextPageRef.current;
-        const { results, totalPages } = await fetchDiscover(room.type, resolveRoomFilters(room), page);
+        const { results, totalPages } = await fetchDiscover(room.type, getEffectiveQuery(room), page);
         if (cancelled) return;
         totalPagesRef.current = totalPages;
         nextPageRef.current = page + 1;
@@ -339,6 +353,9 @@ export function RoomClient({ roomId }: { roomId: string }) {
     // round-trip can lag — update local state immediately so the editor's own deck rebuilds
     // right away instead of waiting on it.
     setRoom((prev) => (prev ? { ...prev, filters } : prev));
+    // Explicit new filters supersede whatever quick preset was active, avoiding an ambiguous
+    // "which one wins" state.
+    setActivePreset(null);
   }
 
   async function handleToggleWatched(match: MatchRow) {
@@ -467,6 +484,28 @@ export function RoomClient({ roomId }: { roomId: string }) {
           </button>
         ))}
       </nav>
+
+      {tab === 'swipe' && (
+        <div className="no-scrollbar mx-5 mt-3 flex gap-2 overflow-x-auto pb-1">
+          {SITUATION_PRESETS.map((preset) => {
+            const active = activePreset === preset.key;
+            return (
+              <button
+                key={preset.key}
+                onClick={() => handleTogglePreset(preset.key)}
+                className={clsx(
+                  'shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
+                  active
+                    ? 'border-transparent bg-gradient-to-r from-brand-pink to-brand-orange text-white shadow-lg shadow-brand-pink/20'
+                    : 'border-white/10 bg-brand-surface text-white/60'
+                )}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {tab === 'swipe' ? (
         loadingCatalog ? (

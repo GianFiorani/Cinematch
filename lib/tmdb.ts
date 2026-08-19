@@ -1,4 +1,4 @@
-import type { MediaType, Room, RoomFilters, TMDBGenre, TMDBItem, TMDBWatchProvider } from '@/types';
+import type { DiscoverQuery, MediaType, Room, RoomFilters, TMDBGenre, TMDBItem, TMDBWatchProvider } from '@/types';
 
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -56,15 +56,20 @@ export interface DiscoverPage {
 
 export async function fetchDiscover(
   type: MediaType,
-  filters: RoomFilters,
+  query: DiscoverQuery,
   page = 1
 ): Promise<DiscoverPage> {
   const params = new URLSearchParams({ mode: 'discover', type, page: String(page) });
-  if (filters.genreIds && filters.genreIds.length > 0) params.set('genre', filters.genreIds.join(','));
-  if (filters.decade) params.set('decade', String(filters.decade));
-  if (filters.providerIds && filters.providerIds.length > 0) {
-    params.set('provider', filters.providerIds.join(','));
+  if (query.genreIds && query.genreIds.length > 0) params.set('genre', query.genreIds.join(','));
+  if (query.decade) params.set('decade', String(query.decade));
+  if (query.providerIds && query.providerIds.length > 0) {
+    params.set('provider', query.providerIds.join(','));
   }
+  if (query.sortBy) params.set('sortBy', query.sortBy);
+  if (query.runtimeLte) params.set('runtimeLte', String(query.runtimeLte));
+  if (query.voteAverageGte) params.set('voteAverageGte', String(query.voteAverageGte));
+  if (query.voteCountGte) params.set('voteCountGte', String(query.voteCountGte));
+  if (query.voteCountLte) params.set('voteCountLte', String(query.voteCountLte));
   const res = await fetch(`/api/tmdb?${params.toString()}`);
   if (!res.ok) throw new Error('No se pudo cargar el catálogo de TMDB');
   const data = await res.json();
@@ -76,6 +81,48 @@ export async function fetchDiscover(
 export function resolveRoomFilters(room: Room): RoomFilters {
   return room.filters ?? { genreIds: room.genre_ids, decade: room.decade, providerIds: room.provider_ids };
 }
+
+export type PresetKey = 'cortitas' | 'pochocleras' | 'joyas';
+
+interface SituationPreset {
+  key: PresetKey;
+  label: string;
+  // Genre ids are TMDB-namespace-specific (movie "Acción" isn't the same id as TV "Acción y
+  // Aventura"), so presets that pin a genre need the room's media type to resolve correctly.
+  getQuery: (type: MediaType) => DiscoverQuery;
+}
+
+export const SITUATION_PRESETS: SituationPreset[] = [
+  {
+    key: 'cortitas',
+    label: '⚡ Cortitas',
+    getQuery: () => ({ genreIds: null, decade: null, providerIds: null, runtimeLte: 100 }),
+  },
+  {
+    key: 'pochocleras',
+    label: '🍿 Pochocleras',
+    getQuery: (type) => ({
+      genreIds: type === 'movie' ? [28, 35] : [10759, 35],
+      decade: null,
+      providerIds: null,
+    }),
+  },
+  {
+    key: 'joyas',
+    label: '💎 Joyas Ocultas',
+    getQuery: () => ({
+      genreIds: null,
+      decade: null,
+      providerIds: null,
+      voteAverageGte: 7.5,
+      voteCountGte: 50,
+      voteCountLte: 1000,
+      // Within the filtered pool, surface the best-rated first — sorting by popularity here
+      // would just favor whatever's already mainstream among the low-vote-count survivors.
+      sortBy: 'vote_average.desc',
+    }),
+  },
+];
 
 export async function fetchProviders(type: MediaType): Promise<TMDBWatchProvider[]> {
   const res = await fetch(`/api/tmdb?mode=providers&type=${type}`);
